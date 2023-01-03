@@ -38,9 +38,9 @@ type Config struct {
 	Database string `json:"db"`
 }
 
-var (
-	preferences []*Preference
-)
+//var (
+//	preferences []*Preference
+//)
 
 func (c Config) GetDbUri() string {
 	return fmt.Sprintf("neo4j://%s:%d", c.Host, c.Port)
@@ -75,10 +75,10 @@ func CreateConfig(filePath string) (conf Config, err error) {
 }
 
 func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
-	if len(preferences) != 0 {
-		fmt.Println("USED CACHE")
-		return preferences, nil
-	}
+	//if len(preferences) != 0 {
+	//	fmt.Println("USED CACHE")
+	//	return preferences, nil
+	//}
 
 	session := proxy.createSession(neo4j.AccessModeRead)
 
@@ -98,7 +98,8 @@ func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
 		return make([]*Preference, 0), err
 	}
 
-	for _, record := range records {
+    preferences := make([]*Preference, len(records))
+	for i, record := range records {
 		node, exists := record.Get("p")
 
 		if exists {
@@ -106,7 +107,8 @@ func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
 
 			if ok {
 				name := Preference(node.Props["name"].(string))
-				preferences = append(preferences, &name)
+                preferences[i] = &name
+				//preferences = append(preferences, &name)
 			}
 		}
 	}
@@ -126,21 +128,17 @@ func (proxy DriverProxy) NewPreference(preference Preference) error {
 		return tx.Run(proxy.ctx, cypher, params)
 	})
 
-	if err != nil {
-		return err
-	}
+	//cypher = `MATCH (a:Preference {name: $p}), (b:Preference)
+    //WHERE NOT a = b
+    //MERGE (a)-[:SHARES {value: 0}]->(b)`
 
-	cypher = `MATCH (a:Preference {name: $p}), (b:Preference)
-    WHERE NOT a = b
-    MERGE (a)-[:SHARES {value: 0}]->(b)`
+	//_, err = session.ExecuteWrite(proxy.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+	//	return tx.Run(proxy.ctx, cypher, params)
+	//})
 
-	_, err = session.ExecuteWrite(proxy.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return tx.Run(proxy.ctx, cypher, params)
-	})
-
-    if err == nil {
-        preferences = append(preferences, &preference)
-    }
+    //if err == nil {
+    //    preferences = append(preferences, &preference)
+    //}
 
 	return err
 }

@@ -20,65 +20,22 @@
 package enjin
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 )
 
-type Config struct {
-	Host     string `json:"host"`
-	Port     uint16 `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"passwd"`
-	Database string `json:"db"`
-}
-
-//var (
-//	preferences []*Preference
-//)
-
-func (c Config) GetDbUri() string {
-	return fmt.Sprintf("neo4j://%s:%d", c.Host, c.Port)
-}
-
-type DriverProxy struct {
-	ctx    context.Context
-	driver neo4j.DriverWithContext
-	db     string
-}
-
-func (p DriverProxy) createSession(mode neo4j.AccessMode) neo4j.SessionWithContext {
-	return p.driver.NewSession(p.ctx, neo4j.SessionConfig{
-		AccessMode:   mode,
-		DatabaseName: p.db,
-	})
-}
+var (
+	preferences set[*Preference]
+)
 
 type Preference string
 
-func CreateConfig(filePath string) (conf Config, err error) {
-	var file *os.File
-
-	file, err = os.Open(filePath)
-	defer file.Close()
-
-	if err == nil {
-		err = json.NewDecoder(file).Decode(&conf)
+func (proxy DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
+	if !preferences.isEmpty() && useCache {
+		return *preferences.enumerate(), nil
 	}
-
-	return conf, err
-}
-
-func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
-	//if len(preferences) != 0 {
-	//	fmt.Println("USED CACHE")
-	//	return preferences, nil
-	//}
 
 	session := proxy.createSession(neo4j.AccessModeRead)
 
@@ -98,8 +55,7 @@ func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
 		return make([]*Preference, 0), err
 	}
 
-    preferences := make([]*Preference, len(records))
-	for i, record := range records {
+	for _, record := range records {
 		node, exists := record.Get("p")
 
 		if exists {
@@ -107,13 +63,12 @@ func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
 
 			if ok {
 				name := Preference(node.Props["name"].(string))
-                preferences[i] = &name
-				//preferences = append(preferences, &name)
+				preferences.add(&name)
 			}
 		}
 	}
 
-	return preferences, err
+	return *preferences.enumerate(), err
 }
 
 func (proxy DriverProxy) NewPreference(preference Preference) error {
@@ -129,16 +84,16 @@ func (proxy DriverProxy) NewPreference(preference Preference) error {
 	})
 
 	//cypher = `MATCH (a:Preference {name: $p}), (b:Preference)
-    //WHERE NOT a = b
-    //MERGE (a)-[:SHARES {value: 0}]->(b)`
+	//WHERE NOT a = b
+	//MERGE (a)-[:SHARES {value: 0}]->(b)`
 
 	//_, err = session.ExecuteWrite(proxy.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 	//	return tx.Run(proxy.ctx, cypher, params)
 	//})
 
-    //if err == nil {
-    //    preferences = append(preferences, &preference)
-    //}
+	if err == nil {
+		preferences.add(&preference)
+	}
 
 	return err
 }

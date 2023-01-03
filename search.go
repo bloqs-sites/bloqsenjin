@@ -143,34 +143,34 @@ func (proxy DriverProxy) NewPreference(preference Preference) error {
 	return err
 }
 
-func main() {
-	conf, err := CreateConfig("credentials.json")
-
-	if err != nil {
-		panic(err)
-	}
-
-	auth := neo4j.BasicAuth(conf.User, conf.Password, "")
-
-	driver, err := neo4j.NewDriverWithContext(conf.GetDbUri(), auth)
-
-	if err != nil {
-		panic(err)
-	}
-
-	ctx := context.Background()
-
-	defer driver.Close(ctx)
-
-	proxy := DriverProxy{ctx, driver, "neo4j"}
-
-	proxy.GetPreferences()
-
-	value, err := proxy.GetPreferences()
-
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(*value[0])
-}
+//func main() {
+//	conf, err := CreateConfig("credentials.json")
+//
+//	if err != nil {
+//		panic(err)
+//	}
+//
+//	auth := neo4j.BasicAuth(conf.User, conf.Password, "")
+//
+//	driver, err := neo4j.NewDriverWithContext(conf.GetDbUri(), auth)
+//
+//	if err != nil {
+//		panic(err)
+//	}
+//
+//	ctx := context.Background()
+//
+//	defer driver.Close(ctx)
+//
+//	proxy := DriverProxy{ctx, driver, "neo4j"}
+//
+//	proxy.GetPreferences()
+//
+//	value, err := proxy.GetPreferences()
+//
+//	if err != nil {
+//		panic(err)
+//	}
+//
+//	fmt.Println(*value[0])
+//}

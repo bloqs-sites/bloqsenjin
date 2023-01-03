@@ -1,3 +1,22 @@
+/**
+  bloqsenjin - An interface that gives access to the graph database that will
+  be used for a search engine on a Bloqs marketplace.
+  Copyright (C) 2023  João Torres
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU Affero General Public License for more details.
+
+  You should have received a copy of the GNU Affero General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 package main
 
 import (
@@ -18,6 +37,10 @@ type Config struct {
 	Password string `json:"passwd"`
 	Database string `json:"db"`
 }
+
+var (
+	preferences []*Preference
+)
 
 func (c Config) GetDbUri() string {
 	return fmt.Sprintf("neo4j://%s:%d", c.Host, c.Port)
@@ -52,6 +75,11 @@ func CreateConfig(filePath string) (conf Config, err error) {
 }
 
 func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
+	if len(preferences) != 0 {
+		fmt.Println("USED CACHE")
+		return preferences, nil
+	}
+
 	session := proxy.createSession(neo4j.AccessModeRead)
 
 	defer session.Close(proxy.ctx)
@@ -70,8 +98,7 @@ func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
 		return make([]*Preference, 0), err
 	}
 
-	preferences := make([]*Preference, len(records))
-	for i, record := range records {
+	for _, record := range records {
 		node, exists := record.Get("p")
 
 		if exists {
@@ -79,7 +106,7 @@ func (proxy DriverProxy) GetPreferences() ([]*Preference, error) {
 
 			if ok {
 				name := Preference(node.Props["name"].(string))
-				preferences[i] = &name
+				preferences = append(preferences, &name)
 			}
 		}
 	}
@@ -111,6 +138,10 @@ func (proxy DriverProxy) NewPreference(preference Preference) error {
 		return tx.Run(proxy.ctx, cypher, params)
 	})
 
+    if err == nil {
+        preferences = append(preferences, &preference)
+    }
+
 	return err
 }
 
@@ -134,6 +165,8 @@ func main() {
 	defer driver.Close(ctx)
 
 	proxy := DriverProxy{ctx, driver, "neo4j"}
+
+	proxy.GetPreferences()
 
 	value, err := proxy.GetPreferences()
 

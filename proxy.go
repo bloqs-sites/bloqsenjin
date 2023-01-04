@@ -14,7 +14,7 @@ var (
 )
 
 func init() {
-    preferences = *build[*Preference]()
+	preferences = build[*Preference]()
 }
 
 // DriverProxy works as an API to the operations to do with the database

@@ -1,6 +1,6 @@
 package enjin
 
-// A basic set data structure implementation
+// A basic et data structure implementation
 type set[T comparable] struct {
 	vals map[T]bool
 }
@@ -27,8 +27,8 @@ func (s set[T]) enumerate() (lst *[]T) {
 	return
 }
 
-func build[T comparable](x ...T) (s *set[T]) {
-    s.vals = make(map[T]bool, len(x))
+func build[T comparable](x ...T) (s set[T]) {
+	s.vals = make(map[T]bool, len(x))
 
 	for _, v := range x {
 		s.add(v)
@@ -37,8 +37,8 @@ func build[T comparable](x ...T) (s *set[T]) {
 	return
 }
 
-func createFrom[T comparable](x []T) (s *set[T]) {
-    s.vals = make(map[T]bool, len(x))
+func createFrom[T comparable](x []T) (s set[T]) {
+	s.vals = make(map[T]bool, len(x))
 
 	for _, v := range x {
 		s.add(v)

@@ -13,6 +13,10 @@ var (
 	preferences set[*Preference]
 )
 
+func init() {
+    preferences = *build[*Preference]()
+}
+
 // DriverProxy works as an API to the operations to do with the database
 type DriverProxy struct {
 	ctx    *context.Context         // context in case of need to cancel an operation

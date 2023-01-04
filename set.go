@@ -28,6 +28,8 @@ func (s set[T]) enumerate() (lst *[]T) {
 }
 
 func build[T comparable](x ...T) (s *set[T]) {
+    s.vals = make(map[T]bool, len(x))
+
 	for _, v := range x {
 		s.add(v)
 	}
@@ -36,6 +38,8 @@ func build[T comparable](x ...T) (s *set[T]) {
 }
 
 func createFrom[T comparable](x []T) (s *set[T]) {
+    s.vals = make(map[T]bool, len(x))
+
 	for _, v := range x {
 		s.add(v)
 	}

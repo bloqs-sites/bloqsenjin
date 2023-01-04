@@ -15,9 +15,9 @@ var (
 
 // DriverProxy works as an API to the operations to do with the database
 type DriverProxy struct {
-	ctx    *context.Context // context in case of need to cancel an operation
+	ctx    *context.Context         // context in case of need to cancel an operation
 	driver *neo4j.DriverWithContext // refrence to the actual service
-	db     *string // database that this proxy uses
+	db     *string                  // database that this proxy uses
 }
 
 func (p DriverProxy) createSession(mode neo4j.AccessMode) neo4j.SessionWithContext {

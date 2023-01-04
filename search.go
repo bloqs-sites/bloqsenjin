@@ -25,20 +25,5 @@ package enjin
 // A Preference it's a representation of an Preference node on the database
 type Preference string
 
-//func main() {
-//	conf, err := CreateConfig("credentials.json")
-//
-//	if err != nil {
-//		panic(err)
-//	}
-//
-//	proxy := conf.CreateProxy()
-//
-//	value, err := proxy.GetPreferences(false)
-//
-//	if err != nil {
-//		panic(err)
-//	}
-//
-//	fmt.Println(*value[0])
-//}
+func main() {
+}

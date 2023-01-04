@@ -11,11 +11,11 @@ import (
 
 // A Config is a struct that has all the information needed to
 type Config struct {
-	Host     string `json:"host"` // the host of the database
-	Port     uint16 `json:"port"` // the port of the database
-    // The User to use for the database authentication
-	User     string `json:"user"`
-    // The Password to use for the database authentication
+	Host string `json:"host"` // the host of the database
+	Port uint16 `json:"port"` // the port of the database
+	// The User to use for the database authentication
+	User string `json:"user"`
+	// The Password to use for the database authentication
 	Password string `json:"passwd"`
 	Database string `json:"db"` // the database name
 }

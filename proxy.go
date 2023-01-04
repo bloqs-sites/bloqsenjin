@@ -74,7 +74,7 @@ func (proxy DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
 		}
 	}
 
-    fmt.Println(preferences.vals)
+	fmt.Println(preferences.vals)
 	return preferences.enumerate(), err
 }
 
@@ -110,7 +110,7 @@ func (proxy DriverProxy) createGlobal() error {
 
 	defer session.Close(*proxy.ctx)
 
-    cypher, params := "MERGE (:Global)", make(map[string]any)
+	cypher, params := "MERGE (:Global)", make(map[string]any)
 
 	_, err := session.ExecuteWrite(*proxy.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return tx.Run(*proxy.ctx, cypher, params)
@@ -120,9 +120,9 @@ func (proxy DriverProxy) createGlobal() error {
 }
 
 func (proxy DriverProxy) InitiateDatabase(preferences []Preference) {
-    for _, preference := range preferences {
-        go proxy.NewPreference(preference)
-    }
+	for _, preference := range preferences {
+		go proxy.NewPreference(preference)
+	}
 
-    go proxy.createGlobal()
+	go proxy.createGlobal()
 }

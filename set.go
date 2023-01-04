@@ -20,10 +20,10 @@ func (s set[T]) size() int {
 func (s set[T]) enumerate() (lst []*T) {
 	lst = make([]*T, len(s.vals))
 
-    i := 0
-    for v := range s.vals {
+	i := 0
+	for v := range s.vals {
 		lst[i] = &v
-        i++
+		i++
 	}
 
 	return

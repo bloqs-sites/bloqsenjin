@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	preferences set[*Preference]
+	preferences set[Preference]
 )
 
 func init() {
-	preferences = build[*Preference]()
+	preferences = buildSet[Preference]()
 }
 
 // DriverProxy works as an API to the operations to do with the database
@@ -39,7 +39,7 @@ func (p *DriverProxy) Close() {
 
 func (proxy DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
 	if !preferences.isEmpty() && useCache {
-		return *preferences.enumerate(), nil
+		return preferences.enumerate(), nil
 	}
 
 	session := proxy.createSession(neo4j.AccessModeRead)
@@ -68,12 +68,12 @@ func (proxy DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
 
 			if ok {
 				name := Preference(node.Props["name"].(string))
-				preferences.add(&name)
+				preferences.add(name)
 			}
 		}
 	}
 
-	return *preferences.enumerate(), err
+	return preferences.enumerate(), err
 }
 
 func (proxy DriverProxy) NewPreference(preference Preference) error {
@@ -97,7 +97,7 @@ func (proxy DriverProxy) NewPreference(preference Preference) error {
 	//})
 
 	if err == nil {
-		preferences.add(&preference)
+		preferences.add(preference)
 	}
 
 	return err

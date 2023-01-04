@@ -17,27 +17,17 @@ func (s set[T]) size() int {
 	return len(s.vals)
 }
 
-func (s set[T]) enumerate() (lst *[]T) {
-	*lst = make([]T, len(s.vals))
+func (s set[T]) enumerate() (lst []*T) {
+	lst = make([]*T, len(s.vals))
 
 	for i := range s.vals {
-		*lst = append(*lst, i)
+		lst = append(lst, &i)
 	}
 
 	return
 }
 
-func build[T comparable](x ...T) (s set[T]) {
-	s.vals = make(map[T]bool, len(x))
-
-	for _, v := range x {
-		s.add(v)
-	}
-
-	return
-}
-
-func createFrom[T comparable](x []T) (s set[T]) {
+func buildSet[T comparable](x ...T) (s set[T]) {
 	s.vals = make(map[T]bool, len(x))
 
 	for _, v := range x {

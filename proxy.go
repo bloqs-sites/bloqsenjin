@@ -20,45 +20,45 @@ func init() {
 
 // DriverProxy works as an API to the operations to do with the database
 type DriverProxy struct {
-	ctx    *context.Context         // context in case of need to cancel an operation
-	driver *neo4j.DriverWithContext // refrence to the actual service
-	db     *string                  // database that this proxy uses
+	ctx *context.Context         // context in case of need to cancel an operation
+	drv *neo4j.DriverWithContext // refrence to the actual service
+	db  *string                  // database that this proxy uses
 }
 
-func (p DriverProxy) createSession(mode neo4j.AccessMode) neo4j.SessionWithContext {
-	driver := *p.driver
-	return driver.NewSession(*p.ctx, neo4j.SessionConfig{
+func (px DriverProxy) createSession(mode neo4j.AccessMode) neo4j.SessionWithContext {
+	drv := *px.drv
+	return drv.NewSession(*px.ctx, neo4j.SessionConfig{
 		AccessMode:   mode,
-		DatabaseName: *p.db,
+		DatabaseName: *px.db,
 	})
 }
 
-func (p *DriverProxy) Close() {
-	driver := *p.driver
-	driver.Close(*p.ctx)
+func (px *DriverProxy) Close() {
+	drv := *px.drv
+	drv.Close(*px.ctx)
 }
 
-func (proxy DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
+func (px DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
 	if !preferences.isEmpty() && useCache {
-		return preferences.enumerate(), nil
+		return nil, nil
 	}
 
-	session := proxy.createSession(neo4j.AccessModeRead)
+	session := px.createSession(neo4j.AccessModeRead)
 
-	defer session.Close(*proxy.ctx)
+	defer session.Close(*px.ctx)
 
-	cypher, params := "MATCH (p:Preference) RETURN p", make(map[string]any)
+	cypher := "MATCH (p:Preference) RETURN p"
 
-	res, err := session.Run(*proxy.ctx, cypher, params)
+	res, err := session.Run(*px.ctx, cypher, nil)
 
 	if err != nil {
-		return make([]*Preference, 0), err
+		return nil, err
 	}
 
-	records, err := res.Collect(*proxy.ctx)
+	records, err := res.Collect(*px.ctx)
 
 	if err != nil {
-		return make([]*Preference, 0), err
+		return nil, err
 	}
 
 	for _, record := range records {
@@ -68,26 +68,28 @@ func (proxy DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
 			node, ok := node.(dbtype.Node)
 
 			if ok {
-				name := Preference(node.Props["name"].(string))
+				name := Preference(strings.ToLower(node.Props["name"].(string)))
+				fmt.Println("Got preference with name:\t", name)
 				preferences.add(name)
 			}
 		}
 	}
 
-	fmt.Println(preferences.vals)
+	fmt.Println("GET:\t", preferences.vals)
 	return preferences.enumerate(), err
 }
 
-func (proxy DriverProxy) NewPreference(preference Preference) error {
-	session := proxy.createSession(neo4j.AccessModeWrite)
+func (px DriverProxy) NewPreference(preference Preference) error {
+	p := strings.ToLower(string(preference))
+	session := px.createSession(neo4j.AccessModeWrite)
 
-	defer session.Close(*proxy.ctx)
+	defer session.Close(*px.ctx)
 
 	cypher, params := "MERGE (:Preference {name: $p})", make(map[string]any)
-	params["p"] = strings.ToLower(string(preference))
+	params["p"] = p
 
-	_, err := session.ExecuteWrite(*proxy.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return tx.Run(*proxy.ctx, cypher, params)
+	_, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		return tx.Run(*px.ctx, cypher, params)
 	})
 
 	//cypher = `MATCH (a:Preference {name: $p}), (b:Preference)
@@ -99,30 +101,34 @@ func (proxy DriverProxy) NewPreference(preference Preference) error {
 	//})
 
 	if err == nil {
-		preferences.add(preference)
+		fmt.Println("Created preference with name:\t", p)
+		preferences.add(Preference(p))
 	}
+
+	fmt.Println("POST:\t", preferences.vals)
 
 	return err
 }
 
-func (proxy DriverProxy) createGlobal() error {
-	session := proxy.createSession(neo4j.AccessModeWrite)
+func (px DriverProxy) createGlobal() error {
+	session := px.createSession(neo4j.AccessModeWrite)
 
-	defer session.Close(*proxy.ctx)
+	defer session.Close(*px.ctx)
 
 	cypher, params := "MERGE (:Global)", make(map[string]any)
 
-	_, err := session.ExecuteWrite(*proxy.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return tx.Run(*proxy.ctx, cypher, params)
+	_, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		return tx.Run(*px.ctx, cypher, params)
 	})
 
 	return err
 }
 
-func (proxy DriverProxy) InitiateDatabase(preferences []Preference) {
-	for _, preference := range preferences {
-		go proxy.NewPreference(preference)
+func (px DriverProxy) InitiateDatabase(preferences []Preference) {
+	for _, p := range preferences {
+		fmt.Println("INIT:\t", p)
+		go px.NewPreference(p)
 	}
 
-	go proxy.createGlobal()
+	go px.createGlobal()
 }

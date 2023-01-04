@@ -1,5 +1,6 @@
 package enjin
 
+// A basic set data structure implementation
 type set[T comparable] struct {
 	vals map[T]bool
 }

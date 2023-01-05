@@ -2,7 +2,6 @@ package enjin
 
 import (
 	"context"
-	"fmt"
 
 	"strings"
 
@@ -69,13 +68,11 @@ func (px DriverProxy) GetPreferences(useCache bool) ([]Preference, error) {
 
 			if ok {
 				name := Preference(strings.ToLower(node.Props["name"].(string)))
-				fmt.Println("Got preference with name:\t", name)
 				preferences.add(name)
 			}
 		}
 	}
 
-	fmt.Println("GET:\t", preferences.vals)
 	return preferences.enumerate(), err
 }
 
@@ -101,11 +98,8 @@ func (px DriverProxy) NewPreference(preference Preference) error {
 	//})
 
 	if err == nil {
-		fmt.Println("Created preference with name:\t", p)
 		preferences.add(Preference(p))
 	}
-
-	fmt.Println("POST:\t", preferences.vals)
 
 	return err
 }
@@ -126,7 +120,6 @@ func (px DriverProxy) createGlobal() error {
 
 func (px DriverProxy) InitiateDatabase(preferences []Preference) {
 	for _, p := range preferences {
-		fmt.Println("INIT:\t", p)
 		go px.NewPreference(p)
 	}
 

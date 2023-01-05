@@ -26,12 +26,12 @@ func (s set[T]) enumerate() (lst []*T) {
 
 	i := 0
 	for v := range s.vals {
-		fmt.Println(v, i)
 		lst[i] = &v
+		fmt.Println(v, i, lst)
 		i++
 	}
 
-	fmt.Println("enumerate end")
+	fmt.Println("enumerate end", lst)
 	return
 }
 

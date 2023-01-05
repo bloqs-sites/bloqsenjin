@@ -2,6 +2,7 @@ package enjin
 
 import (
 	"context"
+	"fmt"
 
 	"strings"
 
@@ -73,7 +74,9 @@ func (px DriverProxy) GetPreferences(useCache bool) ([]Preference, error) {
 		}
 	}
 
-	return preferences.enumerate(), err
+    prefs := preferences.enumerate()
+    fmt.Println("PREFERENCES:\t", prefs)
+	return prefs, err
 }
 
 func (px DriverProxy) NewPreference(preference Preference) error {

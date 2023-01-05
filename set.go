@@ -1,7 +1,5 @@
 package enjin
 
-import "fmt"
-
 // A basic et data structure implementation
 type set[T comparable] struct {
 	vals map[T]bool
@@ -25,7 +23,6 @@ func (s set[T]) enumerate() (lst []T) {
 	i := 0
 	for v := range s.vals {
 		lst[i] = v
-		fmt.Println(v, i, lst)
 		i++
 	}
 	return

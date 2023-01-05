@@ -19,19 +19,15 @@ func (s set[T]) size() int {
 	return len(s.vals)
 }
 
-func (s set[T]) enumerate() (lst []*T) {
-	fmt.Println("enumerate start")
-	lst = make([]*T, len(s.vals))
-	fmt.Println(s.vals, lst)
+func (s set[T]) enumerate() (lst []T) {
+	lst = make([]T, len(s.vals))
 
 	i := 0
 	for v := range s.vals {
-		lst[i] = &v
+		lst[i] = v
 		fmt.Println(v, i, lst)
 		i++
 	}
-
-	fmt.Println("enumerate end", lst)
 	return
 }
 

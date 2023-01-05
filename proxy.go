@@ -38,7 +38,7 @@ func (px *DriverProxy) Close() {
 	drv.Close(*px.ctx)
 }
 
-func (px DriverProxy) GetPreferences(useCache bool) ([]*Preference, error) {
+func (px DriverProxy) GetPreferences(useCache bool) ([]Preference, error) {
 	if !preferences.isEmpty() && useCache {
 		return nil, nil
 	}

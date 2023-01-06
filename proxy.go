@@ -2,6 +2,9 @@ package enjin
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"math"
 
 	"strings"
 
@@ -114,6 +117,54 @@ func (px DriverProxy) createGlobal() error {
 	_, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return tx.Run(*px.ctx, cypher, params)
 	})
+
+	return err
+}
+
+func (px DriverProxy) createClient(id string, likes []Preference) error {
+	session := px.createSession(neo4j.AccessModeWrite)
+
+	defer session.Close(*px.ctx)
+
+	json, err := json.Marshal(likes)
+
+	if err != nil {
+		return nil
+	}
+
+	cypher, params := fmt.Sprintf(`WITH %s as likes
+    MATCH (u:Client {id: $id})
+    SET u.lvl = 1
+    FOREACH (l in likes
+        | MERGE (u)-[:LIKES {weight: $w}]->(:Preference {name: l}))`, json), make(map[string]any)
+	params["id"] = id
+	params["w"] = math.Floor(float64(100 / len(likes)))
+
+	_, err = session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		return tx.Run(*px.ctx, cypher, params)
+	})
+
+	if err != nil {
+		return nil
+	}
+
+	cypher = `MATCH (l1:Preference {name: $lf}), (l2:Preference {name: $ls})
+    MERGE (l1)-[s:SHARES]-(l2)
+    SET s.weight = 1`
+	for i, p := range likes {
+		params["lf"] = p
+		for j := i + 1; j < len(likes); j++ {
+			params["ls"] = likes[j]
+
+			_, err = session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+				return tx.Run(*px.ctx, cypher, params)
+			})
+
+			if err != nil {
+				return nil
+			}
+		}
+	}
 
 	return err
 }

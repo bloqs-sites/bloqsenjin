@@ -121,7 +121,7 @@ func (px DriverProxy) createGlobal() error {
 	return err
 }
 
-func (px DriverProxy) createClient(id string, likes []Preference) error {
+func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 	session := px.createSession(neo4j.AccessModeWrite)
 
 	defer session.Close(*px.ctx)

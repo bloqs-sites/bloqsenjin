@@ -2,7 +2,6 @@ package enjin
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 
@@ -122,9 +121,9 @@ func (px DriverProxy) createGlobal() error {
 }
 
 func (px DriverProxy) CreateClient(id string, likes []Preference) error {
-    if len(likes) == 0 {
-        return fmt.Errorf("No preferences.")
-    }
+	if len(likes) == 0 {
+		return fmt.Errorf("No preferences.")
+	}
 
 	session := px.createSession(neo4j.AccessModeWrite)
 
@@ -144,7 +143,7 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 	for _, p := range likes {
 		params["l"] = p
 
-        _, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		_, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 			return tx.Run(*px.ctx, cypher, params)
 		})
 
@@ -163,7 +162,7 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 		for j := i + 1; j < len(likes); j++ {
 			params["ls"] = likes[j]
 
-            _, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			_, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 				return tx.Run(*px.ctx, cypher, params)
 			})
 

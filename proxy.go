@@ -122,44 +122,48 @@ func (px DriverProxy) createGlobal() error {
 }
 
 func (px DriverProxy) CreateClient(id string, likes []Preference) error {
+    if len(likes) == 0 {
+        return fmt.Errorf("No preferences.")
+    }
+
 	session := px.createSession(neo4j.AccessModeWrite)
 
 	defer session.Close(*px.ctx)
 
-	json, err := json.Marshal(likes)
-
-	if err != nil {
-		return err
-	}
-
-    cypher, params := "MERGE (u:Client {id: $id})", make(map[string]any)
-	params["id"] = id
-
-	cypher = fmt.Sprintf(`WITH %s as likes
-    MATCH (u:Client {id: $id})
+	cypher, params := `MERGE (u:Client {id: $id})
+    MERGE (p:Preference {name: $l}))
     SET u.lvl = 1
-    FOREACH (l in likes
-        | MERGE (u)-[:LIKES {weight: $w}]->(:Preference {name: l}))`, json)
+    MERGE (u)-[:LIKES {weight: $w}]->(p)
+    MERGE (:Global)-[l:LIKES]->(p)
+    ON CREATE SET l.weight = 1
+    ON MATCH SET l.weight = l.weight + 1`, make(map[string]any)
+
+	params["id"] = id
 	params["w"] = math.Floor(float64(100 / len(likes)))
 
-	_, err = session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		return tx.Run(*px.ctx, cypher, params)
-	})
+	for _, p := range likes {
+		params["l"] = p
 
-	if err != nil {
-		return err
+        _, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			return tx.Run(*px.ctx, cypher, params)
+		})
+
+		if err != nil {
+			return err
+		}
 	}
 
 	cypher = `MATCH (l1:Preference {name: $lf}), (l2:Preference {name: $ls})
     MERGE (l1)-[s:SHARES]-(l2)
-    SET s.weight = 1`
+    ON CREATE SET s.weight = 1
+    ON MATCH SET s.weight = l.weight + 1`
 
 	for i, p := range likes {
 		params["lf"] = p
 		for j := i + 1; j < len(likes); j++ {
 			params["ls"] = likes[j]
 
-			_, err = session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+            _, err := session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 				return tx.Run(*px.ctx, cypher, params)
 			})
 
@@ -169,7 +173,7 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 		}
 	}
 
-	return err
+	return nil
 }
 
 func (px DriverProxy) InitiateDatabase(preferences []Preference) {

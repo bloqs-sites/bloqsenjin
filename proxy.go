@@ -130,7 +130,7 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 	defer session.Close(*px.ctx)
 
 	cypher, params := `MERGE (u:Client {id: $id})
-    MERGE (p:Preference {name: $l}))
+    MERGE (p:Preference {name: $l})
     SET u.lvl = 1
     MERGE (u)-[:LIKES {weight: $w}]->(p)
     MERGE (:Global)-[l:LIKES]->(p)

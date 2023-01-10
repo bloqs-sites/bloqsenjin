@@ -129,25 +129,24 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 	json, err := json.Marshal(likes)
 
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
-	cypher, params := fmt.Sprintf(`WITH %s as likes
+    cypher, params := "MERGE (u:Client {id: $id})", make(map[string]any)
+	params["id"] = id
+
+	cypher = fmt.Sprintf(`WITH %s as likes
     MATCH (u:Client {id: $id})
     SET u.lvl = 1
     FOREACH (l in likes
-        | MERGE (u)-[:LIKES {weight: $w}]->(:Preference {name: l}))`, json), make(map[string]any)
-	params["id"] = id
+        | MERGE (u)-[:LIKES {weight: $w}]->(:Preference {name: l}))`, json)
 	params["w"] = math.Floor(float64(100 / len(likes)))
-	fmt.Println(json, cypher, params)
 
 	_, err = session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		return tx.Run(*px.ctx, cypher, params)
 	})
 
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
@@ -157,23 +156,19 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 
 	for i, p := range likes {
 		params["lf"] = p
-		fmt.Println("lf:\t", p)
 		for j := i + 1; j < len(likes); j++ {
 			params["ls"] = likes[j]
-			fmt.Println("ls:\t", likes[j])
 
 			_, err = session.ExecuteWrite(*px.ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 				return tx.Run(*px.ctx, cypher, params)
 			})
 
 			if err != nil {
-				fmt.Println(err)
 				return err
 			}
 		}
 	}
 
-	fmt.Println(err)
 	return err
 }
 

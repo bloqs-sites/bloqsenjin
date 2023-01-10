@@ -131,9 +131,10 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 
 	cypher, params := `MERGE (u:Client {id: $id})
     MERGE (p:Preference {name: $l})
+    MERGE (g:Global)
     SET u.lvl = 1
     MERGE (u)-[:LIKES {weight: $w}]->(p)
-    MERGE (:Global)-[l:LIKES]->(p)
+    MERGE (g)-[l:LIKES]->(p)
     ON CREATE SET l.weight = 1
     ON MATCH SET l.weight = l.weight + 1`, make(map[string]any)
 

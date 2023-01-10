@@ -155,7 +155,7 @@ func (px DriverProxy) CreateClient(id string, likes []Preference) error {
 	cypher = `MATCH (l1:Preference {name: $lf}), (l2:Preference {name: $ls})
     MERGE (l1)-[s:SHARES]-(l2)
     ON CREATE SET s.weight = 1
-    ON MATCH SET s.weight = l.weight + 1`
+    ON MATCH SET s.weight = s.weight + 1`
 
 	for i, p := range likes {
 		params["lf"] = p

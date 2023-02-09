@@ -2,7 +2,6 @@ package rest
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 )
@@ -32,15 +31,15 @@ type DataManipulater interface {
 	Update(table string, assignments []map[string]any, conditions []map[string]any) (Result, error)
 	Delete(table string, conditions []map[string]any) (Result, error)
 
-    CreateTables([]Table) error
+	CreateTables([]Table) error
 }
 
 func (s *Server) AttachHandler(route string, h Handler) {
-    db := *s.dbh
-    db.CreateTables(h.CreateTable())
+	db := *s.dbh
+	db.CreateTables(h.CreateTable())
 
 	s.mux.Handle(route, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		models, err := s.Guide(r, h)
+		models, err := h.Handle(r, s.dbh)
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -61,17 +60,4 @@ func (s *Server) AttachHandler(route string, h Handler) {
 
 func (s Server) Run() error {
 	return http.ListenAndServe(s.port, s.mux)
-}
-
-func (s Server) Guide(r *http.Request, h Handler) ([]JSON, error) {
-	switch r.Method {
-	case "":
-		fallthrough
-	case http.MethodGet:
-		return h.Read(r, *s.dbh)
-	case http.MethodPost:
-		return h.Create(r, *s.dbh)
-	}
-
-	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))
 }

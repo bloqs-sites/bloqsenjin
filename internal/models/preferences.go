@@ -1,6 +1,8 @@
 package models
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
@@ -10,16 +12,16 @@ type PreferenceHandler struct {
 }
 
 func (p PreferenceHandler) Create(r *http.Request, dbh rest.DataManipulater) ([]rest.JSON, error) {
-    if err := r.ParseForm(); err != nil {
-        return nil, err
-    }
+	if err := r.ParseForm(); err != nil {
+		return nil, err
+	}
 
-    dbh.Insert("preference", []map[string]any{
-        {
-            "name": r.FormValue("name"),
-            "description": r.FormValue("description"),
-        },
-    })
+	dbh.Insert("preference", []map[string]any{
+		{
+			"name":        r.FormValue("name"),
+			"description": r.FormValue("description"),
+		},
+	})
 
 	return nil, nil
 }
@@ -31,11 +33,11 @@ func (p PreferenceHandler) Read(r *http.Request, dbh rest.DataManipulater) ([]re
 	}
 
 	rows := res.Rows
-    rn := len(rows)
+	rn := len(rows)
 
-    if rn < 1 {
-        return rows, nil
-    }
+	if rn < 1 {
+		return rows, nil
+	}
 
 	json, i := make([]rest.JSON, len(rows)+1), 0
 
@@ -61,6 +63,19 @@ func (p PreferenceHandler) Delete(*http.Request, rest.DataManipulater) ([]rest.J
 	return nil, nil
 }
 
+func (p PreferenceHandler) Handle(r *http.Request, dbh *rest.DataManipulater) ([]rest.JSON, error) {
+	switch r.Method {
+	case "":
+		fallthrough
+	case http.MethodGet:
+		return p.Read(r, *dbh)
+	case http.MethodPost:
+		return p.Create(r, *dbh)
+	}
+
+	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))
+}
+
 func (p PreferenceHandler) CreateTable() []rest.Table {
 	return []rest.Table{
 		{
@@ -70,7 +85,7 @@ func (p PreferenceHandler) CreateTable() []rest.Table {
 				"`name` VARCHAR(80)",
 				"`description` VARCHAR(140)",
 				"UNIQUE(`name`)",
-                "PRIMARY KEY(`id`)",
+				"PRIMARY KEY(`id`)",
 			},
 		},
 	}

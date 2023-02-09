@@ -131,12 +131,12 @@ func (dbh MariaDB) Delete(table string, conditions []map[string]any) (rest.Resul
 
 func (dbh MariaDB) CreateTables(ts []rest.Table) error {
 	for _, t := range ts {
-        _, err := dbh.conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);",
+		_, err := dbh.conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);",
 			t.Name, strings.Join(t.Columns, ", ")))
 
-        if err != nil {
-            return err
-        }
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

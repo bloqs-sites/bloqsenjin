@@ -24,6 +24,8 @@ type Mapper interface {
 }
 
 type Handler interface {
+	Handle(*http.Request, *DataManipulater) ([]JSON, error)
+
 	CRUDer
 	Mapper
 }

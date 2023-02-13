@@ -11,12 +11,14 @@ import (
 type PreferenceHandler struct {
 }
 
-func (p PreferenceHandler) Create(r *http.Request, dbh rest.DataManipulater) ([]rest.JSON, error) {
-	if err := r.ParseForm(); err != nil {
+func (p PreferenceHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+	if err := r.ParseMultipartForm(1024); err != nil {
 		return nil, err
 	}
 
-	dbh.Insert("preference", []map[string]any{
+	dbh := *s.GetDB()
+
+	dbh.Insert("preference", []map[string]string{
 		{
 			"name":        r.FormValue("name"),
 			"description": r.FormValue("description"),
@@ -26,7 +28,9 @@ func (p PreferenceHandler) Create(r *http.Request, dbh rest.DataManipulater) ([]
 	return nil, nil
 }
 
-func (p PreferenceHandler) Read(r *http.Request, dbh rest.DataManipulater) ([]rest.JSON, error) {
+func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+	dbh := *s.GetDB()
+
 	res, err := dbh.Select("preference", p.MapGenerator())
 	if err != nil {
 		return nil, err
@@ -55,22 +59,22 @@ func (p PreferenceHandler) Read(r *http.Request, dbh rest.DataManipulater) ([]re
 	return json, nil
 }
 
-func (p PreferenceHandler) Update(*http.Request, rest.DataManipulater) ([]rest.JSON, error) {
+func (p PreferenceHandler) Update(*http.Request, rest.Server) ([]rest.JSON, error) {
 	return nil, nil
 }
 
-func (p PreferenceHandler) Delete(*http.Request, rest.DataManipulater) ([]rest.JSON, error) {
+func (p PreferenceHandler) Delete(*http.Request, rest.Server) ([]rest.JSON, error) {
 	return nil, nil
 }
 
-func (p PreferenceHandler) Handle(r *http.Request, dbh *rest.DataManipulater) ([]rest.JSON, error) {
+func (p PreferenceHandler) Handle(r *http.Request, s rest.Server) ([]rest.JSON, error) {
 	switch r.Method {
 	case "":
 		fallthrough
 	case http.MethodGet:
-		return p.Read(r, *dbh)
+		return p.Read(r, s)
 	case http.MethodPost:
-		return p.Create(r, *dbh)
+		return p.Create(r, s)
 	}
 
 	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))

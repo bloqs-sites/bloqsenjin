@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -71,13 +72,13 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 	}
 
 	for rows.Next() {
-		column := columns()
+		loopc := columns()
 
 		vals := make([]any, len(column))
 
 		i := 0
-		for _, v := range column {
-			vals[i] = v
+		for _, v := range keys {
+			vals[i] = loopc[v]
 			i++
 		}
 
@@ -91,8 +92,8 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 		row := make(rest.JSON, len(column))
 
 		i = 0
-		for k := range column {
-			row[k] = vals[i]
+		for _, v := range keys {
+			row[v] = vals[i]
 			i++
 		}
 
@@ -105,11 +106,92 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 	}, rows.Err()
 }
 
-func (dbh MariaDB) Insert(table string, rows []map[string]any) (rest.Result, error) {
-	r := make([]rest.JSON, 0)
+func (dbh MariaDB) Insert(table string, rows []map[string]string) (rest.Result, error) {
+	if len(rows) < 1 {
+		return rest.Result{
+			LastID: nil,
+			Rows:   nil,
+		}, errors.New("No rows to be inserted")
+	}
+
+	set := make(map[string]bool, len(rows[0]))
+	for _, r := range rows {
+		for c := range r {
+			set[c] = true
+		}
+	}
+	columns, i := make([]string, len(set)), 0
+	for c := range set {
+		columns[i] = c
+		i++
+	}
+
+	rowsvals, i := make([][]any, len(rows)), 0
+	for _, r := range rows {
+		rowsvals[i] = make([]any, len(columns))
+		for j, c := range columns {
+			v, ok := r[c]
+
+			if !ok {
+				//rowsvals[i][j] = "DEFAULT"
+				//rowsvals[i][j] = "NULL"
+				//continue
+				return rest.Result{
+					LastID: nil,
+					Rows:   nil,
+				}, errors.New("Cannot find value for column")
+			}
+
+			rowsvals[i][j] = v
+		}
+		i++
+	}
+
+	rowsstr := make([]string, len(rowsvals))
+	vals, i := make([]any, len(rowsvals)*len(columns)), 0
+	for j, r := range rowsvals {
+		var rowstr strings.Builder
+		rowstr.WriteString("(")
+		first := true
+		for _, v := range r {
+			vals[i] = v
+			i++
+			if first {
+				rowstr.WriteString("?")
+				first = false
+				continue
+			}
+			rowstr.WriteString(", ?")
+		}
+		rowstr.WriteString(")")
+		rowsstr[j] = rowstr.String()
+	}
+
+	stmt := fmt.Sprintf("INSERT INTO `%s` (`%s`) VALUES %s", table, strings.Join(columns, "`, `"), strings.Join(rowsstr, ", "))
+
+	res, err := dbh.conn.Exec(stmt, vals...)
+
+	fmt.Println(res, err)
+
+	if err != nil {
+		last, lasterr := res.LastInsertId()
+
+		if lasterr != nil {
+			return rest.Result{
+				LastID: nil,
+				Rows:   nil,
+			}, err
+		}
+
+		return rest.Result{
+			LastID: &last,
+			Rows:   nil,
+		}, err
+	}
+
 	return rest.Result{
 		LastID: nil,
-		Rows:   r,
+		Rows:   nil,
 	}, nil
 }
 

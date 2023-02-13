@@ -7,10 +7,10 @@ import (
 type JSON map[string]any
 
 type CRUDer interface {
-	Create(*http.Request, DataManipulater) ([]JSON, error)
-	Read(*http.Request, DataManipulater) ([]JSON, error)
-	Update(*http.Request, DataManipulater) ([]JSON, error)
-	Delete(*http.Request, DataManipulater) ([]JSON, error)
+	Create(*http.Request, Server) ([]JSON, error)
+	Read(*http.Request, Server) ([]JSON, error)
+	Update(*http.Request, Server) ([]JSON, error)
+	Delete(*http.Request, Server) ([]JSON, error)
 }
 
 type Table struct {
@@ -24,7 +24,7 @@ type Mapper interface {
 }
 
 type Handler interface {
-	Handle(*http.Request, *DataManipulater) ([]JSON, error)
+	Handle(*http.Request, Server) ([]JSON, error)
 
 	CRUDer
 	Mapper

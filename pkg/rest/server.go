@@ -27,19 +27,19 @@ type Result struct {
 
 type DataManipulater interface {
 	Select(table string, columns func() map[string]any) (Result, error)
-	Insert(table string, rows []map[string]any) (Result, error)
+	Insert(table string, rows []map[string]string) (Result, error)
 	Update(table string, assignments []map[string]any, conditions []map[string]any) (Result, error)
 	Delete(table string, conditions []map[string]any) (Result, error)
 
 	CreateTables([]Table) error
 }
 
-func (s *Server) AttachHandler(route string, h Handler) {
+func (s Server) AttachHandler(route string, h Handler) {
 	db := *s.dbh
 	db.CreateTables(h.CreateTable())
 
 	s.mux.Handle(route, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		models, err := h.Handle(r, s.dbh)
+		models, err := h.Handle(r, s)
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -56,6 +56,10 @@ func (s *Server) AttachHandler(route string, h Handler) {
 			fmt.Fprintf(w, "%s", err.Error())
 		}
 	}))
+}
+
+func (s *Server) GetDB() *DataManipulater {
+	return s.dbh
 }
 
 func (s Server) Run() error {

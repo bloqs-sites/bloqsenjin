@@ -7,7 +7,7 @@ import (
 
 	"github.com/bloqs-sites/bloqsenjin/internal/db"
 	"github.com/bloqs-sites/bloqsenjin/internal/models"
-	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	//"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
 
@@ -16,14 +16,18 @@ func main() {
 
 	s := rest.NewServer(":8080", &conn)
 
-	auth := auth.NewAuthManager(nil)
+	//auth := auth.NewAuthManager(nil)
 	s.AttachHandler(
-        "/preference",
-        auth.AuthDecor(
-            new(models.PreferenceHandler),
-            1,
-        )(),
-    )
+		"/preference",
+		new(models.PreferenceHandler),
+	)
+	//s.AttachHandler(
+	//    "/preference",
+	//    auth.AuthDecor(
+	//        new(models.PreferenceHandler),
+	//        1,
+	//    )(),
+	//)
 
 	err := s.Run()
 	if errors.Is(err, http.ErrServerClosed) {

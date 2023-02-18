@@ -95,6 +95,15 @@ func (p PreferenceHandler) CreateTable() []rest.Table {
 	}
 }
 
+func (h *PreferenceHandler) CreateIndexes() []rest.Index {
+    return []rest.Index{}
+}
+
+func (h *PreferenceHandler) CreateViews() []rest.View {
+    return []rest.View{}
+}
+
+
 func (p PreferenceHandler) MapGenerator() func() map[string]any {
 	return func() map[string]any {
 		m := make(map[string]any)

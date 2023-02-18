@@ -171,9 +171,7 @@ func (dbh MariaDB) Insert(table string, rows []map[string]string) (rest.Result, 
 
 	res, err := dbh.conn.Exec(stmt, vals...)
 
-	fmt.Println(res, err)
-
-	if err != nil {
+	if err == nil {
 		last, lasterr := res.LastInsertId()
 
 		if lasterr != nil {
@@ -217,6 +215,7 @@ func (dbh MariaDB) CreateTables(ts []rest.Table) error {
 			t.Name, strings.Join(t.Columns, ", ")))
 
 		if err != nil {
+            fmt.Println(err);
 			return err
 		}
 	}

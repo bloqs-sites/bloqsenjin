@@ -21,6 +21,10 @@ func main() {
 		"/preference",
 		new(models.PreferenceHandler),
 	)
+	s.AttachHandler(
+		"/bloq",
+		new(models.BloqHandler),
+	)
 	//s.AttachHandler(
 	//    "/preference",
 	//    auth.AuthDecor(

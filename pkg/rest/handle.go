@@ -18,8 +18,21 @@ type Table struct {
 	Columns []string
 }
 
+type Index struct {
+	Name   string
+	Table   string
+	Cols   []string
+}
+
+type View struct {
+	Name   string
+	Select string
+}
+
 type Mapper interface {
 	CreateTable() []Table
+	CreateIndexes() []Index
+	CreateViews() []View
 	MapGenerator() func() map[string]any
 }
 

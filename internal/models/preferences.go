@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
@@ -30,6 +32,49 @@ func (p PreferenceHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, 
 
 func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) {
 	dbh := *s.GetDB()
+
+	parts := strings.Split(r.URL.Path, "/")
+
+	if len(parts) > 2 && len(parts[2]) > 0 {
+        id, err := strconv.ParseInt(parts[2], 10, 0)
+
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := dbh.Select("preference", p.MapGenerator())
+		if err != nil {
+			return nil, err
+		}
+
+		rows := res.Rows
+		rn := len(rows)
+
+		if rn < 1 {
+			return rows, nil
+		}
+
+		json := make([]rest.JSON, 1)
+
+		for _, v := range rows {
+			i, ok := v["id"]
+
+            if !ok {
+                continue
+            }
+
+            j, ok := i.(*int64)
+
+			if ok && *j == id {
+				v["@context"] = "https://schema.org/"
+				v["@type"] = "CategoryCode"
+				json[0] = v
+				return json, nil
+			}
+		}
+
+		return json, nil
+	}
 
 	res, err := dbh.Select("preference", p.MapGenerator())
 	if err != nil {
@@ -96,13 +141,12 @@ func (p PreferenceHandler) CreateTable() []rest.Table {
 }
 
 func (h *PreferenceHandler) CreateIndexes() []rest.Index {
-    return []rest.Index{}
+	return []rest.Index{}
 }
 
 func (h *PreferenceHandler) CreateViews() []rest.View {
-    return []rest.View{}
+	return []rest.View{}
 }
-
 
 func (p PreferenceHandler) MapGenerator() func() map[string]any {
 	return func() map[string]any {

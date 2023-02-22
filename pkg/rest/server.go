@@ -39,11 +39,15 @@ type DataManipulater interface {
 	Delete(table string, conditions []map[string]any) (Result, error)
 
 	CreateTables([]Table) error
+	CreateIndexes([]Index) error
+	CreateViews([]View) error
 }
 
 func (s Server) AttachHandler(route string, h Handler) {
 	db := *s.dbh
 	db.CreateTables(h.CreateTable())
+	db.CreateIndexes(h.CreateIndexes())
+	db.CreateViews(h.CreateViews())
 
 	s.mux.routes[route] = func(w http.ResponseWriter, r *http.Request) {
 		models, err := h.Handle(r, s)
@@ -81,6 +85,7 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         http.NotFound(w, r)
         return
     }
+
     route := parts[1]
 
     handler, ok := s.mux.routes[route]

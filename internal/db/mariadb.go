@@ -222,3 +222,21 @@ func (dbh MariaDB) CreateTables(ts []rest.Table) error {
 
 	return nil
 }
+
+func (dbh MariaDB) CreateIndexes(ts []rest.Index) error {
+	return nil
+}
+
+func (dbh MariaDB) CreateViews(ts []rest.View) error {
+	for _, t := range ts {
+		_, err := dbh.conn.Exec(fmt.Sprintf("CREATE OR REPLACE VIEW `%s` AS %s;",
+			t.Name, t.Select))
+
+		if err != nil {
+            fmt.Println(err);
+			return err
+		}
+	}
+
+	return nil
+}

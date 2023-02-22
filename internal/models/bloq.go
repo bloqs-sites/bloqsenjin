@@ -15,84 +15,84 @@ type BloqHandler struct {
 }
 
 func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
 		return nil, err
 	}
 
-    defer r.MultipartForm.RemoveAll()
+	bloqrow := make(map[string]string)
 
-    bloqrow := make(map[string]string)
+	bloqrow["name"] = r.MultipartForm.Value["name"][0]
 
-    bloqrow["name"] = r.MultipartForm.Value["name"][0]
+	if len(bloqrow["name"]) > 80 {
+		return nil, fmt.Errorf("Bloq name provided is too big")
+	}
 
-    if len(bloqrow["name"]) > 80 {
-        return nil, fmt.Errorf("Bloq name provided is too big")
-    }
+	bloqrow["description"] = r.MultipartForm.Value["description"][0]
 
-    bloqrow["description"] = r.MultipartForm.Value["description"][0]
+	if len(bloqrow["description"]) > 140 {
+		return nil, fmt.Errorf("Bloq description provided is too big")
+	}
 
-    if len(bloqrow["description"]) > 140 {
-        return nil, fmt.Errorf("Bloq description provided is too big")
-    }
+	bloqrow["category"] = r.MultipartForm.Value["category"][0]
 
-    bloqrow["category"] = r.MultipartForm.Value["category"][0]
+	if _, err := strconv.ParseUint(bloqrow["category"], 10, 0); err != nil {
+		return nil, fmt.Errorf("Category ID `%s` is invalid", bloqrow["category"])
+	}
 
-    if _, err := strconv.ParseUint(bloqrow["category"], 10, 0); err != nil  {
-        return nil, fmt.Errorf("Category ID `%s` is invalid", bloqrow["category"])
-    }
+	bloqrow["hasAdultConsideration"] = r.MultipartForm.Value["hasAdultConsideration"][0]
 
-    bloqrow["hasAdultConsideration"] = r.MultipartForm.Value["hasAdultConsideration"][0]
+	p18, err := strconv.ParseBool(bloqrow["hasAdultConsideration"])
 
-    p18, err := strconv.ParseBool(bloqrow["hasAdultConsideration"]);
+	if err != nil {
+		p18 = false
+	}
 
-    if err != nil  {
-        p18 = false
-    }
-
-    if p18 {
-        bloqrow["hasAdultConsideration"] = "1"
-    } else {
-        bloqrow["hasAdultConsideration"] = "0"
-    }
+	if p18 {
+		bloqrow["hasAdultConsideration"] = "1"
+	} else {
+		bloqrow["hasAdultConsideration"] = "0"
+	}
 
 	dbh := *s.GetDB()
 
-    res, err := dbh.Insert("bloq", []map[string]string{ bloqrow })
+	res, err := dbh.Insert("bloq", []map[string]string{bloqrow})
 
-    if err != nil || res.LastID == nil {
-        return nil, fmt.Errorf("Internal error")
-    }
+	if err != nil || res.LastID == nil {
+		return nil, fmt.Errorf("Internal error")
+	}
 
-    bloqirow := make(map[string]string)
+	bloqirow := make(map[string]string)
 
-    bloqirow["bloq"] = strconv.FormatInt(*res.LastID, 10)
+	bloqirow["bloq"] = strconv.FormatInt(*res.LastID, 10)
 
-    img := r.MultipartForm.File["image"][0]
+	if len(r.MultipartForm.File["image"]) > 0 {
+		img := r.MultipartForm.File["image"][0]
 
-    if !strings.HasPrefix(img.Header.Get("Content-Type"), "image/") {
-        return nil, fmt.Errorf("File provided has not a Content-Type image/*")
-    }
+		if !strings.HasPrefix(img.Header.Get("Content-Type"), "image/") {
+			return nil, fmt.Errorf("File provided has not a Content-Type image/*")
+		}
 
-    if img.Size > (32 << 20) {
-        return nil, fmt.Errorf("Image to big")
-    }
+		if img.Size > (32 << 20) {
+			return nil, fmt.Errorf("Image to big")
+		}
 
-    bloqirow["image"] = img.Filename
+		bloqirow["image"] = img.Filename
+	}
 
 	bloqirow["changeTimestamp"] = strconv.FormatInt(time.Now().Unix(), 10)
 
-	dbh.Insert("bloq_image", []map[string]string{ bloqirow })
+	dbh.Insert("bloq_image", []map[string]string{bloqirow})
 
-    bloqkrow := make(map[string]string)
+	bloqkrow := make(map[string]string)
 
-    bloqkrow["bloq"] = strconv.FormatInt(*res.LastID, 10)
+	bloqkrow["bloq"] = strconv.FormatInt(*res.LastID, 10)
 
-    for _, k := range r.MultipartForm.Value["keyword"] {
-        bloqkrow["keyword"] = k
-	    dbh.Insert("bloq_keyword", []map[string]string{ bloqkrow })
-    }
+	for _, k := range r.MultipartForm.Value["keyword"] {
+		bloqkrow["keyword"] = k
+		dbh.Insert("bloq_keyword", []map[string]string{bloqkrow})
+	}
 
-    /* Saves image somewhere like Cloudflare R2, IPFS, idk */
+	/* Saves image somewhere like Cloudflare R2, IPFS, idk */
 
 	return res.Rows, nil
 }
@@ -100,7 +100,50 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error
 func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) {
 	dbh := *s.GetDB()
 
-	res, err := dbh.Select("preference", h.MapGenerator())
+	parts := strings.Split(r.URL.Path, "/")
+
+	if len(parts) > 2 && len(parts[2]) > 0 {
+		id, err := strconv.ParseInt(parts[2], 10, 0)
+
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := dbh.Select("bloq_basic", h.MapGenerator())
+		if err != nil {
+			return nil, err
+		}
+
+		rows := res.Rows
+		rn := len(rows)
+
+		if rn < 1 {
+			return rows, nil
+		}
+
+		json := make([]rest.JSON, 1)
+
+		for _, v := range rows {
+			i, ok := v["id"]
+
+			if !ok {
+				continue
+			}
+
+			j, ok := i.(*int64)
+
+			if ok && *j == id {
+				v["@context"] = "https://schema.org/"
+				v["@type"] = "Product"
+				json[0] = v
+				return json, nil
+			}
+		}
+
+		return json, nil
+	}
+
+	res, err := dbh.Select("bloq_basic", h.MapGenerator())
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +162,7 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) 
 	}
 
 	for _, v := range rows {
-		v["@type"] = "CategoryCode"
+		v["@type"] = "Product"
 
 		i++
 		json[i] = v
@@ -157,8 +200,8 @@ func (h *BloqHandler) CreateTable() []rest.Table {
 				"`id` INT UNSIGNED AUTO_INCREMENT",
 				"`category` INT UNSIGNED NOT NULL",
 				"`hasAdultConsideration` BOOL DEFAULT 0",
-                "`description` VARCHAR(140) NOT NULL",
-                "`name` VARCHAR(80) NOT NULL",
+				"`description` VARCHAR(140) NOT NULL",
+				"`name` VARCHAR(80) NOT NULL",
 				"UNIQUE(`name`)",
 				"PRIMARY KEY(`id`)",
 			},
@@ -167,7 +210,7 @@ func (h *BloqHandler) CreateTable() []rest.Table {
 			Name: "bloq_image",
 			Columns: []string{
 				"`bloq` INT UNSIGNED NOT NULL",
-                "`image` VARCHAR(254)",
+				"`image` VARCHAR(254)",
 				"`changeTimestamp` INT NOT NULL",
 				"PRIMARY KEY(`bloq`)",
 			},
@@ -194,19 +237,27 @@ func (h *BloqHandler) CreateTable() []rest.Table {
 }
 
 func (h *BloqHandler) CreateIndexes() []rest.Index {
-    return []rest.Index{}
+	return []rest.Index{}
 }
 
 func (h *BloqHandler) CreateViews() []rest.View {
-    return []rest.View{}
+	return []rest.View{
+        {
+            Name: "bloq_basic",
+            Select: "SELECT `bloq`.*, `bloq_image`.`image` FROM `bloq` INNER JOIN `bloq_image` ON `bloq`.`id` = `bloq_image`.`bloq`;",
+        },
+    }
 }
 
 func (h *BloqHandler) MapGenerator() func() map[string]any {
 	return func() map[string]any {
 		m := make(map[string]any)
 		m["id"] = new(int64)
-		m["description"] = new(string)
 		m["name"] = new(string)
+		m["description"] = new(string)
+		m["category"] = new(int64)
+		m["hasAdultConsideration"] = new(bool)
+		m["image"] = new(*string)
 		return m
 	}
 }

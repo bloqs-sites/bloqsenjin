@@ -20,6 +20,7 @@
 !Makefile
 
 !/proto/*.proto
+/proto/*.go
 !protoc.sh
 
 # ...even if they are in subdirectories

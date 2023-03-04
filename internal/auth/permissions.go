@@ -1,4 +1,4 @@
-package internal
+package auth
 
 const (
 	NO_PERMISSIONS uint = 0

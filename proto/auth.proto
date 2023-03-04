@@ -1,0 +1,18 @@
+syntax="proto3";
+
+option go_package = "https://github.com/bloqs-sites/bloqsenjin";
+
+package bloqs.auth;
+
+service Auth {
+  rpc Validate(Token) returns (Validation);
+}
+
+message Token {
+  bytes jwt = 1; // required
+  optional uint64 permissions = 2;
+}
+
+message Validation {
+  bool valid = 1; // required
+}

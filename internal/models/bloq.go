@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
 
@@ -15,6 +16,10 @@ type BloqHandler struct {
 }
 
 func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+    if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
+        return nil, fmt.Errorf("No permissions");
+    }
+
 	if err := r.ParseMultipartForm(64 << 20); err != nil {
 		return nil, err
 	}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	pb "github.com/bloqs-sites/bloqsenjin/proto"
 )
 
 type Router struct {
@@ -15,15 +17,17 @@ type Server struct {
 	port string
 	mux  *Router
 	dbh  *DataManipulater
+    auth pb.AuthClient
 }
 
-func NewServer(port string, crud DataManipulater) Server {
+func NewServer(port string, crud DataManipulater, auth pb.AuthClient) Server {
 	return Server{
 		port: port,
 		mux:  &Router{
             routes: make(map[string]func(w http.ResponseWriter, r *http.Request)),
         },
 		dbh:  &crud,
+        auth: auth,
 	}
 }
 
@@ -99,4 +103,17 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) Run() error {
 	return http.ListenAndServe(s.port, s)
+}
+
+func (s Server) ValidateJWT(r *http.Request, permitions uint64) bool {
+    res, err := s.auth.Validate(r.Context(), &pb.Token{
+        Jwt: []byte(r.Header.Get("Authorization")),
+        Permissions: &permitions,
+    })
+
+	if err != nil {
+        return false;
+	}
+
+    return res.Valid;
 }

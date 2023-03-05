@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -10,8 +12,15 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/internal/db"
 	"github.com/bloqs-sites/bloqsenjin/internal/models"
 
-	//"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
+
+	pb "github.com/bloqs-sites/bloqsenjin/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
 )
 
 func init() {
@@ -19,9 +28,17 @@ func init() {
 }
 
 func main() {
-	conn := db.NewMariaDB("owduser:passwd@/owd")
+	flag.Parse()
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+	c := pb.NewAuthClient(conn)
 
-	s := rest.NewServer(":8089", &conn)
+	dbh := db.NewMariaDB("owduser:passwd@/owd")
+
+	s := rest.NewServer(":8089", &dbh, c)
 
 	file, err := os.Open("./cmd/api/preferences")
 
@@ -40,7 +57,7 @@ func main() {
 			parts = append(parts, "")
 		}
 
-		go conn.Insert("preference", []map[string]string{
+		go dbh.Insert("preference", []map[string]string{
 			{
 				"name":        parts[0],
 				"description": parts[1],
@@ -48,16 +65,8 @@ func main() {
 		})
 	}
 
-	//auth := auth.NewAuthManager(nil)
 	s.AttachHandler("preference", new(models.PreferenceHandler))
 	s.AttachHandler("bloq", new(models.BloqHandler))
-	//s.AttachHandler(
-	//    "/preference",
-	//    auth.AuthDecor(
-	//        new(models.PreferenceHandler),
-	//        1,
-	//    )(),
-	//)
 
 	err = s.Run()
 	if errors.Is(err, http.ErrServerClosed) {

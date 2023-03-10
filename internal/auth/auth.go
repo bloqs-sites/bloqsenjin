@@ -46,6 +46,11 @@ func (a Auther) VerifyToken(t string, auths uint) bool {
 		return []byte("secret"), nil
 	}, jwt.WithValidMethods([]string{}))
 
+    if err != nil {
+        return false
+    }
+
+
 	if claims, ok := token.Claims.(*claims); ok && token.Valid {
 		return (claims.Payload.Permissions & auths) == auths
 	} else if errors.Is(err, jwt.ErrTokenMalformed) {

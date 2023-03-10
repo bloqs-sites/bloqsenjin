@@ -40,7 +40,7 @@ func main() {
 
 	s := rest.NewServer(":8089", &dbh, c)
 
-	file, err := os.Open("./cmd/api/preferences")
+	file, err := os.Open("./cmd/rest/preferences")
 
 	if err != nil {
 		panic(err)

@@ -5,7 +5,23 @@ option go_package = "https://github.com/bloqs-sites/bloqsenjin";
 package bloqs.auth;
 
 service Auth {
+  rpc SignIn(Credentials) returns (Validation);
+  rpc SignOut(Credentials) returns (Validation);
+  rpc LogIn(Credentials) returns (Token);
+  rpc LogOut(Credentials) returns (Validation);
   rpc Validate(Token) returns (Validation);
+}
+
+message Credentials {
+  uint64 id = 1; // required
+  oneof creds {
+    BasicCredentials basic = 2;
+  } // required
+}
+
+message BasicCredentials {
+  string email = 1; // required
+  string password = 2; // required
 }
 
 message Token {
@@ -15,4 +31,5 @@ message Token {
 
 message Validation {
   bool valid = 1; // required
+  optional string message = 2;
 }

@@ -16,9 +16,9 @@ type BloqHandler struct {
 }
 
 func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error) {
-    if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
-        return nil, fmt.Errorf("No permissions");
-    }
+	if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
+		return nil, fmt.Errorf("No permissions")
+	}
 
 	if err := r.ParseMultipartForm(64 << 20); err != nil {
 		return nil, err
@@ -247,11 +247,11 @@ func (h *BloqHandler) CreateIndexes() []rest.Index {
 
 func (h *BloqHandler) CreateViews() []rest.View {
 	return []rest.View{
-        {
-            Name: "bloq_basic",
-            Select: "SELECT `bloq`.*, `bloq_image`.`image` FROM `bloq` INNER JOIN `bloq_image` ON `bloq`.`id` = `bloq_image`.`bloq`;",
-        },
-    }
+		{
+			Name:   "bloq_basic",
+			Select: "SELECT `bloq`.*, `bloq_image`.`image` FROM `bloq` INNER JOIN `bloq_image` ON `bloq`.`id` = `bloq_image`.`bloq`;",
+		},
+	}
 }
 
 func (h *BloqHandler) MapGenerator() func() map[string]any {

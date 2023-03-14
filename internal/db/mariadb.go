@@ -215,7 +215,7 @@ func (dbh MariaDB) CreateTables(ts []rest.Table) error {
 			t.Name, strings.Join(t.Columns, ", ")))
 
 		if err != nil {
-            fmt.Println(err);
+			fmt.Println(err)
 			return err
 		}
 	}
@@ -233,7 +233,7 @@ func (dbh MariaDB) CreateViews(ts []rest.View) error {
 			t.Name, t.Select))
 
 		if err != nil {
-            fmt.Println(err);
+			fmt.Println(err)
 			return err
 		}
 	}

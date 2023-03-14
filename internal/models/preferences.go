@@ -36,7 +36,7 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 	parts := strings.Split(r.URL.Path, "/")
 
 	if len(parts) > 2 && len(parts[2]) > 0 {
-        id, err := strconv.ParseInt(parts[2], 10, 0)
+		id, err := strconv.ParseInt(parts[2], 10, 0)
 
 		if err != nil {
 			return nil, err
@@ -59,11 +59,11 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 		for _, v := range rows {
 			i, ok := v["id"]
 
-            if !ok {
-                continue
-            }
+			if !ok {
+				continue
+			}
 
-            j, ok := i.(*int64)
+			j, ok := i.(*int64)
 
 			if ok && *j == id {
 				v["@context"] = "https://schema.org/"

@@ -10,24 +10,24 @@ import (
 )
 
 type Router struct {
-    routes map[string]func(w http.ResponseWriter, r *http.Request)
+	routes map[string]func(w http.ResponseWriter, r *http.Request)
 }
 
 type Server struct {
 	port string
 	mux  *Router
 	dbh  *DataManipulater
-    auth pb.AuthClient
+	auth pb.AuthClient
 }
 
 func NewServer(port string, crud DataManipulater, auth pb.AuthClient) Server {
 	return Server{
 		port: port,
-		mux:  &Router{
-            routes: make(map[string]func(w http.ResponseWriter, r *http.Request)),
-        },
+		mux: &Router{
+			routes: make(map[string]func(w http.ResponseWriter, r *http.Request)),
+		},
 		dbh:  &crud,
-        auth: auth,
+		auth: auth,
 	}
 }
 
@@ -64,13 +64,13 @@ func (s Server) AttachHandler(route string, h Handler) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-        if len(models) == 0 {
-            _, err = w.Write([]byte("{}"))
-        } else if len(models) == 1 {
-		    err = json.NewEncoder(w).Encode(models[0])
-        } else {
-		    err = json.NewEncoder(w).Encode(models)
-        }
+		if len(models) == 0 {
+			_, err = w.Write([]byte("{}"))
+		} else if len(models) == 1 {
+			err = json.NewEncoder(w).Encode(models[0])
+		} else {
+			err = json.NewEncoder(w).Encode(models)
+		}
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -84,21 +84,21 @@ func (s *Server) GetDB() *DataManipulater {
 }
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    parts := strings.Split(r.URL.Path, "/")
-    if len(parts) == 0 {
-        http.NotFound(w, r)
-        return
-    }
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) == 0 {
+		http.NotFound(w, r)
+		return
+	}
 
-    route := parts[1]
+	route := parts[1]
 
-    handler, ok := s.mux.routes[route]
-    if !ok {
-        http.NotFound(w, r)
-        return
-    }
+	handler, ok := s.mux.routes[route]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
 
-    handler(w, r)
+	handler(w, r)
 }
 
 func (s Server) Run() error {
@@ -106,14 +106,14 @@ func (s Server) Run() error {
 }
 
 func (s Server) ValidateJWT(r *http.Request, permitions uint64) bool {
-    res, err := s.auth.Validate(r.Context(), &pb.Token{
-        Jwt: []byte(r.Header.Get("Authorization")),
-        Permissions: &permitions,
-    })
+	res, err := s.auth.Validate(r.Context(), &pb.Token{
+		Jwt:         []byte(r.Header.Get("Authorization")),
+		Permissions: &permitions,
+	})
 
 	if err != nil {
-        return false;
+		return false
 	}
 
-    return res.Valid;
+	return res.Valid
 }

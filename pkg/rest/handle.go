@@ -19,9 +19,9 @@ type Table struct {
 }
 
 type Index struct {
-	Name   string
-	Table   string
-	Cols   []string
+	Name  string
+	Table string
+	Cols  []string
 }
 
 type View struct {

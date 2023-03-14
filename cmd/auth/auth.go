@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
+	"github.com/bloqs-sites/bloqsenjin/proto"
 
 	pb "github.com/bloqs-sites/bloqsenjin/proto"
 	"google.golang.org/grpc"
@@ -25,6 +26,55 @@ type server struct {
 	pb.UnimplementedAuthServer
 }
 
+func (s *server) SignIn(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	switch x := in.Creds.(type) {
+	case *proto.Credentials_Basic:
+		if err := auther.SignInBasic(x); err != nil {
+			msg := err.Error()
+			return &pb.Validation{
+				Valid:   false,
+				Message: &msg,
+			}, err
+		}
+	case nil:
+		msg := ""
+		return &pb.Validation{
+			Valid:   false,
+			Message: &msg,
+		}, fmt.Errorf("")
+	default:
+		msg := ""
+		return &pb.Validation{
+			Valid:   false,
+			Message: &msg,
+		}, fmt.Errorf("Profile.Avatar has unexpected type %T", x)
+	}
+
+	return &pb.Validation{
+		Valid: true,
+	}, nil
+}
+
+func (s *server) SignOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	return &pb.Validation{
+		Valid: true,
+	}, nil
+}
+
+func (s *server) LogIn(ctx context.Context, in *pb.Credentials) (*pb.Token, error) {
+	var x uint64 = 4
+	return &pb.Token{
+		Jwt:         []byte(""),
+		Permissions: &x,
+	}, nil
+}
+
+func (s *server) LogOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	return &pb.Validation{
+		Valid: true,
+	}, nil
+}
+
 func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, error) {
 	return &pb.Validation{
 		Valid: auther.VerifyToken(string(in.GetJwt()), uint(*in.Permissions)),
@@ -34,7 +84,7 @@ func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, er
 func main() {
 	flag.Parse()
 
-    startgRPCServer()
+	startgRPCServer()
 
 	//rdb := redis.NewClient(&redis.Options{
 	//	Addr:     "localhost:6379",

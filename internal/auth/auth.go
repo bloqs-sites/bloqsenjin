@@ -13,17 +13,27 @@ import (
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/text/cases"
 )
 
 var (
 	email_regex *regexp.Regexp
 
 	hostname string
+
+	domains_list map[string][]string = conf.GetConf()["domains"].(map[string][]string)
 )
 
-const email_regex_str = "(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])"
+const (
+	email_regex_str = "(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])"
+
+	domains_blacklist = iota
+	domains_whitelist
+	domains_nil
+)
 
 func init() {
 	regex, err := regexp.Compile(email_regex_str)
@@ -37,7 +47,6 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 type claims struct {
@@ -109,6 +118,24 @@ func (a *Auther) verifyEmail(email string) error {
 
 	email_domain := strings.Split(email, "@")[1]
 
+	v, t := getDomainsListType()
+	switch t {
+	case domains_nil:
+	case domains_blacklist:
+		for _, d := range v {
+			if d == email_domain {
+				return fmt.Errorf("The email `%s` has a blacklisted domain", email)
+			}
+		}
+	case domains_whitelist:
+		for _, d := range v {
+			if d == email_domain {
+				break
+			}
+		}
+		return fmt.Errorf("The email `%s` has a non whitelisted domain", email)
+	}
+
 	mxr, err := net.LookupMX(email_domain)
 
 	if err != nil {
@@ -122,6 +149,14 @@ func (a *Auther) verifyEmail(email string) error {
 	ch, n := make(chan error, len(mxr)+1), 0
 
 	for _, i := range mxr {
+		switch t {
+		case domains_blacklist:
+			for _, d := range v {
+				if d == i.Host {
+					return fmt.Errorf("The email `%s` has a blacklisted domain", email)
+				}
+			}
+		}
 		go a.smtpVerify(ch, email, i.Host)
 	}
 	go a.smtpVerify(ch, email, email_domain)
@@ -141,6 +176,16 @@ func (a *Auther) verifyEmail(email string) error {
 			}
 		}
 	}
+}
+
+func getDomainsListType() ([]string, int) {
+	if v, ok := domains_list["blacklist"]; ok {
+		return v, domains_blacklist
+	} else if v, ok := domains_list["whitelist"]; ok {
+		return v, domains_whitelist
+	}
+
+	return nil, domains_nil
 }
 
 func (a *Auther) smtpVerify(ch chan error, email, mx string) {

@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 
 	pb "github.com/bloqs-sites/bloqsenjin/proto"
@@ -111,4 +112,7 @@ func startgRPCServer() {
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+}
+
+func startHTTPServer() {
 }

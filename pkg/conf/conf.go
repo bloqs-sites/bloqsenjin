@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
+	"google.golang.org/protobuf/internal/errors"
 )
 
 var (
@@ -47,8 +49,30 @@ func init() {
 	}
 }
 
-func GetConf() map[string]any {
-	return conf
+func GetConf(keys ...string) (any, error) {
+	c := conf
+	for _, i := range keys {
+		v, ok := c[i]
+		if !ok {
+			return nil, errors.New("nil")
+		}
+
+		if m, ok := v.(map[string]any); ok {
+			c = m
+		} else {
+			return v, nil
+		}
+	}
+
+	return c, nil
+}
+
+func MustGetConf(keys ...string) any {
+	if v, err := GetConf(keys...); err == nil {
+		return v
+	}
+
+	return nil
 }
 
 func readConf(path string) (map[string]any, error) {

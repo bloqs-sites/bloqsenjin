@@ -7,15 +7,13 @@ import (
 	"strings"
 
 	pb "github.com/bloqs-sites/bloqsenjin/proto"
-)
 
-type Router struct {
-	routes map[string]func(w http.ResponseWriter, r *http.Request)
-}
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+)
 
 type Server struct {
 	port string
-	mux  *Router
+	mux  *mux.Router
 	dbh  *DataManipulater
 	auth pb.AuthClient
 }
@@ -23,9 +21,7 @@ type Server struct {
 func NewServer(port string, crud DataManipulater, auth pb.AuthClient) Server {
 	return Server{
 		port: port,
-		mux: &Router{
-			routes: make(map[string]func(w http.ResponseWriter, r *http.Request)),
-		},
+		mux:  mux.NewRouter(),
 		dbh:  &crud,
 		auth: auth,
 	}
@@ -53,7 +49,7 @@ func (s Server) AttachHandler(route string, h Handler) {
 	db.CreateIndexes(h.CreateIndexes())
 	db.CreateViews(h.CreateViews())
 
-	s.mux.routes[route] = func(w http.ResponseWriter, r *http.Request) {
+	s.mux.Route(route, func(w http.ResponseWriter, r *http.Request) {
 		models, err := h.Handle(r, s)
 
 		if err != nil {
@@ -76,33 +72,15 @@ func (s Server) AttachHandler(route string, h Handler) {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "%s", err.Error())
 		}
-	}
+	})
 }
 
 func (s *Server) GetDB() *DataManipulater {
 	return s.dbh
 }
 
-func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) == 0 {
-		http.NotFound(w, r)
-		return
-	}
-
-	route := parts[1]
-
-	handler, ok := s.mux.routes[route]
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-
-	handler(w, r)
-}
-
 func (s Server) Run() error {
-	return http.ListenAndServe(s.port, s)
+	return http.ListenAndServe(s.port, s.mux)
 }
 
 func (s Server) ValidateJWT(r *http.Request, permitions uint64) bool {

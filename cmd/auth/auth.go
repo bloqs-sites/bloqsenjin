@@ -121,7 +121,7 @@ func main() {
 func startGRPCServer(ch chan error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *gRPCPort))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		ch <- err
 	}
 
 	s = grpc.NewServer()
@@ -132,13 +132,14 @@ func startGRPCServer(ch chan error) {
 	}
 }
 
-func createGRPCClient() pb.AuthClient {
+func createGRPCClient(ch chan error) (pb.AuthClient, func()) {
 	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", *gRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		ch <- err
 	}
-	defer conn.Close()
-	return pb.NewAuthClient(conn)
+	return pb.NewAuthClient(conn), func() {
+		conn.Close()
+	}
 }
 
 func startHTTPServer(ch chan error) {
@@ -148,25 +149,27 @@ func startHTTPServer(ch chan error) {
 	fmt.Printf("Auth path:\t %s\n", route)
 	fmt.Printf("Auth type query parameter:\t %s\n", query)
 
-	c := createGRPCClient()
-
 	r := mux.NewRouter()
 	r.Route(route, func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			s.ServeHTTP(w, r)
+			return
 		}
 
 		var err error
 
-		if err = r.ParseForm(); err != nil {
+		if err = r.ParseMultipartForm(64 << 20); err != nil {
 			return
 		}
 
 		var v *pb.Validation
 
+		c, cc := createGRPCClient(ch)
+		defer cc()
+
 		switch r.URL.Query().Get(query) {
 		case "basic":
-			v, err = c.SignIn(context.Background(), &pb.Credentials{
+			v, err = c.SignIn(r.Context(), &pb.Credentials{
 				Creds: &proto.Credentials_Basic{
 					Basic: &pb.BasicCredentials{
 						Email:    r.Form["email"][0],
@@ -177,14 +180,19 @@ func startHTTPServer(ch chan error) {
 		}
 
 		if err != nil {
-			http.NotFound(w, r)
+			w.Write([]byte(err.Error()))
+			w.WriteHeader(500)
+			return
 		}
 
-		if v != nil {
-			http.NotFound(w, r)
+		if v == nil {
+			w.WriteHeader(400)
+			return
 		}
 
-		w.Write([]byte(*v.Message))
+		if v.Message != nil {
+			w.Write([]byte(*v.Message))
+		}
 
 		if v.Valid {
 			w.WriteHeader(200)

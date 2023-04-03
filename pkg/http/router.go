@@ -17,6 +17,8 @@ func NewRouter() *Router {
 }
 
 func (mux *Router) Route(route string, h Handle) {
+	parts := strings.Split(route, "/")
+	route = parts[1]
 	mux.routes[route] = h
 }
 

@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
+	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 
 	pb "github.com/bloqs-sites/bloqsenjin/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	//"github.com/redis/go-redis/v9"
 )
 
@@ -21,6 +25,8 @@ var (
 	gRPCPort = flag.Int("gRPCPort", 50051, "The gRPC server port")
 
 	auther = new(auth.Auther)
+
+	s *grpc.Server
 )
 
 type server struct {
@@ -85,7 +91,10 @@ func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, er
 func main() {
 	flag.Parse()
 
-	startgRPCServer()
+	go startGRPCServer()
+	if err := startHTTPServer(); err != nil {
+		panic(err)
+	}
 
 	//rdb := redis.NewClient(&redis.Options{
 	//	Addr:     "localhost:6379",
@@ -100,13 +109,13 @@ func main() {
 	//}
 }
 
-func startgRPCServer() {
+func startGRPCServer() {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *gRPCPort))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s = grpc.NewServer()
 	pb.RegisterAuthServer(s, &server{})
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
@@ -114,5 +123,67 @@ func startgRPCServer() {
 	}
 }
 
-func startHTTPServer() {
+func createGRPCClient() pb.AuthClient {
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", *gRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+	return pb.NewAuthClient(conn)
+}
+
+func startHTTPServer() error {
+	route := conf.MustGetConfOrDefault("/", "auth", "signInPath")
+	query := conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
+
+	fmt.Printf("Auth path:\t %s\n", route)
+	fmt.Printf("Auth type query parameter:\t %s\n", query)
+
+	c := createGRPCClient()
+
+	r := mux.NewRouter()
+	r.Route(route, func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			s.ServeHTTP(w, r)
+		}
+
+		var err error
+
+		if err = r.ParseForm(); err != nil {
+			return
+		}
+
+		var v *pb.Validation
+
+		switch r.URL.Query().Get(query) {
+		case "basic":
+			v, err = c.SignIn(context.Background(), &pb.Credentials{
+				Creds: &proto.Credentials_Basic{
+					Basic: &pb.BasicCredentials{
+						Email:    r.Form["email"][0],
+						Password: r.Form["pass"][0],
+					},
+				},
+			})
+		}
+
+		if err != nil {
+			http.NotFound(w, r)
+		}
+
+		if v != nil {
+			http.NotFound(w, r)
+		}
+
+		w.Write([]byte(*v.Message))
+
+		if v.Valid {
+			w.WriteHeader(200)
+		} else {
+			w.WriteHeader(400)
+		}
+	})
+
+	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
+	return http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), r)
 }

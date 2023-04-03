@@ -112,6 +112,8 @@ func (a Auther) VerifyToken(t string, auths uint) bool {
 }
 
 func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
+    i, j, k := a.kv.List(ctx, nil, nil)
+    fmt.Println(i, j ,k)
 	if err := a.verifyEmail(c.Basic.GetEmail()); err != nil {
 		return err
 	}
@@ -121,21 +123,25 @@ func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) er
 		return err
 	}
 
-	return a.kv.Put(ctx, []byte(fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())), hash)
+    return a.kv.Put(ctx, map[string][]byte{
+        fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()): hash,
+    }, 0)
 }
 
 func (a *Auther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic) error {
-	hash, err := a.kv.Get(ctx, []byte(fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())))
+	hashes, err := a.kv.Get(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))
 
 	if err != nil {
 		return err
 	}
 
+    hash := hashes[fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())]
+
 	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
 		return err
 	}
 
-	if err := a.kv.Delete(ctx, []byte(fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))); err != nil {
+	if err := a.kv.Delete(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())); err != nil {
 		return err
 	}
 

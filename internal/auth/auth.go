@@ -35,6 +35,8 @@ const (
 	domains_blacklist = iota
 	domains_whitelist
 	domains_nil
+
+	basic_email_prefix = "basic:email:%s"
 )
 
 func init() {
@@ -119,7 +121,25 @@ func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) er
 		return err
 	}
 
-	return a.kv.Put(ctx, []byte(c.Basic.GetEmail()), hash)
+	return a.kv.Put(ctx, []byte(fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())), hash)
+}
+
+func (a *Auther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic) error {
+	hash, err := a.kv.Get(ctx, []byte(fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())))
+
+	if err != nil {
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
+		return err
+	}
+
+	if err := a.kv.Delete(ctx, []byte(fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (a *Auther) verifyEmail(email string) error {

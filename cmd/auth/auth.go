@@ -73,31 +73,12 @@ func createGRPCClient(ch chan error) (pb.AuthClient, func()) {
 }
 
 func startHTTPServer(ch chan error) {
-	route := conf.MustGetConfOrDefault("/", "auth", "signInPath")
-	query := conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
-
-	fmt.Printf("Auth path:\t %s\n", route)
-	fmt.Printf("Auth type query parameter:\t %s\n", query)
+	sign_in_route := conf.MustGetConfOrDefault("/sign-in", "auth", "signInPath")
+	sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signInPath")
 
 	r := mux.NewRouter()
-	r.Route(route, func(w http.ResponseWriter, r *http.Request) {
-		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			s.ServeHTTP(w, r)
-			return
-		}
-
-		var err error
-
-		if err = r.ParseMultipartForm(64 << 20); err != nil {
-			return
-		}
-
-		var v *pb.Validation
-
-		c, cc := createGRPCClient(ch)
-		defer cc()
-
-		switch r.URL.Query().Get(query) {
+	r.Route(sign_in_route, authRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
+		switch t {
 		case "basic":
 			v, err = c.SignIn(r.Context(), &pb.Credentials{
 				Creds: &proto.Credentials_Basic{
@@ -108,28 +89,23 @@ func startHTTPServer(ch chan error) {
 				},
 			})
 		}
+		return
+	}))
 
-		if err != nil {
-			w.Write([]byte(err.Error()))
-			w.WriteHeader(500)
-			return
+	r.Route(sign_out_route, authRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
+		switch t {
+		case "basic":
+			v, err = c.SignOut(r.Context(), &pb.Credentials{
+				Creds: &proto.Credentials_Basic{
+					Basic: &pb.BasicCredentials{
+						Email:    r.Form["email"][0],
+						Password: r.Form["pass"][0],
+					},
+				},
+			})
 		}
-
-		if v == nil {
-			w.WriteHeader(400)
-			return
-		}
-
-		if v.Message != nil {
-			w.Write([]byte(*v.Message))
-		}
-
-		if v.Valid {
-			w.WriteHeader(200)
-		} else {
-			w.WriteHeader(400)
-		}
-	})
+		return
+	}))
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
 	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), r)
@@ -162,7 +138,7 @@ func (s *server) SignIn(ctx context.Context, in *pb.Credentials) (*pb.Validation
 		return &pb.Validation{
 			Valid:   false,
 			Message: &msg,
-		}, fmt.Errorf("Profile.Avatar has unexpected type %T", x)
+		}, fmt.Errorf("Credentials.Creds has unexpected type %T", x)
 	}
 
 	return &pb.Validation{
@@ -171,6 +147,29 @@ func (s *server) SignIn(ctx context.Context, in *pb.Credentials) (*pb.Validation
 }
 
 func (s *server) SignOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	switch x := in.Creds.(type) {
+	case *proto.Credentials_Basic:
+		if err := s.auther.SignOutBasic(ctx, x); err != nil {
+			msg := err.Error()
+			return &pb.Validation{
+				Valid:   false,
+				Message: &msg,
+			}, err
+		}
+	case nil:
+		msg := ""
+		return &pb.Validation{
+			Valid:   false,
+			Message: &msg,
+		}, fmt.Errorf("")
+	default:
+		msg := ""
+		return &pb.Validation{
+			Valid:   false,
+			Message: &msg,
+		}, fmt.Errorf("Credentials.Creds has unexpected type %T", x)
+	}
+
 	return &pb.Validation{
 		Valid: true,
 	}, nil
@@ -194,4 +193,49 @@ func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, er
 	return &pb.Validation{
 		Valid: s.auther.VerifyToken(string(in.GetJwt()), uint(*in.Permissions)),
 	}, nil
+}
+
+func authRoute(ch chan error, match func(string, pb.AuthClient, *http.Request) (*pb.Validation, error)) func(http.ResponseWriter, *http.Request) {
+	query := conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			s.ServeHTTP(w, r)
+			return
+		}
+
+		var err error
+
+		if err = r.ParseMultipartForm(64 << 20); err != nil {
+			return
+		}
+
+		var v *pb.Validation
+
+		c, cc := createGRPCClient(ch)
+		defer cc()
+
+		v, err = match(r.URL.Query().Get(query), c, r)
+
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			w.WriteHeader(500)
+			return
+		}
+
+		if v == nil {
+			w.WriteHeader(400)
+			return
+		}
+
+		if v.Message != nil {
+			w.Write([]byte(*v.Message))
+		}
+
+		if v.Valid {
+			w.WriteHeader(200)
+		} else {
+			w.WriteHeader(400)
+		}
+	}
 }

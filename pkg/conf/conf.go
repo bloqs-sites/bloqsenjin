@@ -74,6 +74,14 @@ func MustGetConf(keys ...string) any {
 	return nil
 }
 
+func MustGetConfOrDefault[T any](default_value T, keys ...string) T {
+	if v, err := GetConf(keys...); err == nil {
+		return v.(T)
+	}
+
+	return default_value
+}
+
 func readConf(path string) (map[string]any, error) {
 	var r io.ReadCloser
 

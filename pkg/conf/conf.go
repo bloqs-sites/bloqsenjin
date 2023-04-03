@@ -11,7 +11,6 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
-	"google.golang.org/protobuf/internal/errors"
 )
 
 var (
@@ -78,7 +77,7 @@ func MustGetConf(keys ...string) any {
 func readConf(path string) (map[string]any, error) {
 	var r io.ReadCloser
 
-	if _, err := url.Parse(path); err != nil {
+	if _, err := url.ParseRequestURI(path); err != nil {
 		path, err := filepath.Abs(path)
 		if err != nil {
 			return nil, err

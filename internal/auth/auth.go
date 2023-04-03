@@ -16,7 +16,6 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/golang-jwt/jwt/v4"
-	"golang.org/x/text/cases"
 )
 
 var (
@@ -24,7 +23,7 @@ var (
 
 	hostname string
 
-	domains_list map[string][]string = conf.GetConf()["domains"].(map[string][]string)
+	domains_list map[string][]string
 )
 
 const (
@@ -47,6 +46,12 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+    if domains, ok := conf.MustGetConf("domains").(map[string][]string); ok {
+        domains_list = domains
+    } else {
+        domains_list = nil
+    }
 }
 
 type claims struct {
@@ -179,6 +184,10 @@ func (a *Auther) verifyEmail(email string) error {
 }
 
 func getDomainsListType() ([]string, int) {
+    if domains_list == nil {
+	    return nil, domains_nil
+    }
+
 	if v, ok := domains_list["blacklist"]; ok {
 		return v, domains_blacklist
 	} else if v, ok := domains_list["whitelist"]; ok {

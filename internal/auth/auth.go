@@ -206,9 +206,18 @@ type errorCloseClosure struct {
 }
 
 func newErrorCloseClosure(err error, con net.Conn) errorCloseClosure {
+	var close func() error
+	if con != nil {
+		close = con.Close
+	} else {
+		close = func() error {
+			return err
+		}
+	}
+
 	return errorCloseClosure{
-		err:   nil,
-		close: con.Close,
+		err,
+		close,
 	}
 }
 func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
@@ -216,6 +225,7 @@ func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 
 	if err != nil {
 		ch <- newErrorCloseClosure(err, con)
+		return
 	}
 
 	stream := make([]byte, 998)
@@ -226,6 +236,7 @@ func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 
 	if string(status) != "220" {
 		ch <- newErrorCloseClosure(errors.New("Service not ready"), con)
+		return
 	}
 
 	fmt.Fprintf(con, "MAIL FROM: <%s>\r\n", "example@example.org")
@@ -233,6 +244,7 @@ func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 
 	if string(status) != "250" {
 		ch <- newErrorCloseClosure(errors.New(""), con)
+		return
 	}
 
 	fmt.Fprintf(con, "RCPT TO: <%s>\r\n", email)
@@ -240,6 +252,7 @@ func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 
 	if string(status) != "250" {
 		ch <- newErrorCloseClosure(errors.New(""), con)
+		return
 	}
 
 	fmt.Fprintf(con, "RSET\r\n")
@@ -247,6 +260,7 @@ func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 
 	if string(status) != "250" {
 		ch <- newErrorCloseClosure(errors.New(""), con)
+		return
 	}
 
 	fmt.Fprintf(con, "QUIT\r\n")
@@ -254,6 +268,7 @@ func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 
 	if string(status) != "221" && string(status) != "250" {
 		ch <- newErrorCloseClosure(errors.New(""), con)
+		return
 	}
 
 	ch <- newErrorCloseClosure(nil, con)

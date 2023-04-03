@@ -16,6 +16,7 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -105,6 +106,13 @@ func (a *Auther) SignInBasic(c *proto.Credentials_Basic) error {
 		return err
 	}
 
+	hash, err := bcrypt.GenerateFromPassword([]byte(c.Basic.GetPassword()), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(hash, string(hash))
+
 	return nil
 }
 
@@ -145,7 +153,7 @@ func (a *Auther) verifyEmail(email string) error {
 		return mxr[i].Pref < mxr[j].Pref
 	})
 
-	ch, n := make(chan error, len(mxr)+1), 0
+	ch, n := make(chan errorCloseClosure, len(mxr)+1), 0
 
 	for _, i := range mxr {
 		switch t {
@@ -162,13 +170,14 @@ func (a *Auther) verifyEmail(email string) error {
 
 	for {
 		select {
-		case err := <-ch:
+		case c := <-ch:
 			n++
-			if err == nil {
+			err := c.close()
+			if c.err == nil && err == nil {
 				return nil
 			}
 
-			fmt.Println(err)
+			fmt.Println(err, c.err)
 
 			if n >= len(mxr)+1 {
 				return fmt.Errorf("The email `%s` is invalid", email)
@@ -191,15 +200,23 @@ func getDomainsListType() ([]string, int) {
 	return nil, domains_nil
 }
 
-func (a *Auther) smtpVerify(ch chan error, email, mx string) {
+type errorCloseClosure struct {
+	err   error
+	close func() error
+}
+
+func newErrorCloseClosure(err error, con net.Conn) errorCloseClosure {
+	return errorCloseClosure{
+		err:   nil,
+		close: con.Close,
+	}
+}
+func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
 	con, err := net.Dial("tcp", net.JoinHostPort(mx, strconv.Itoa(25)))
 
 	if err != nil {
-		ch <- err
+		ch <- newErrorCloseClosure(err, con)
 	}
-
-	defer con.Close()
-	// TODO: needs to Close when email verified already and stop this function execution
 
 	stream := make([]byte, 998)
 	status := stream[:3]
@@ -208,38 +225,36 @@ func (a *Auther) smtpVerify(ch chan error, email, mx string) {
 	bufio.NewReader(con).Read(stream)
 
 	if string(status) != "220" {
-		ch <- errors.New("Service not ready")
+		ch <- newErrorCloseClosure(errors.New("Service not ready"), con)
 	}
 
 	fmt.Fprintf(con, "MAIL FROM: <%s>\r\n", "example@example.org")
 	bufio.NewReader(con).Read(stream)
 
 	if string(status) != "250" {
-		ch <- errors.New("")
+		ch <- newErrorCloseClosure(errors.New(""), con)
 	}
 
 	fmt.Fprintf(con, "RCPT TO: <%s>\r\n", email)
 	bufio.NewReader(con).Read(stream)
 
 	if string(status) != "250" {
-		ch <- errors.New("")
+		ch <- newErrorCloseClosure(errors.New(""), con)
 	}
 
 	fmt.Fprintf(con, "RSET\r\n")
 	bufio.NewReader(con).Read(stream)
 
 	if string(status) != "250" {
-		ch <- errors.New("")
+		ch <- newErrorCloseClosure(errors.New(""), con)
 	}
 
 	fmt.Fprintf(con, "QUIT\r\n")
 	bufio.NewReader(con).Read(stream)
 
 	if string(status) != "221" && string(status) != "250" {
-		ch <- errors.New("")
+		ch <- newErrorCloseClosure(errors.New(""), con)
 	}
 
-	con.Close()
-
-	ch <- nil
+	ch <- newErrorCloseClosure(nil, con)
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
+	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -34,14 +34,14 @@ func NewMariaDB(dsn string) MariaDB {
 	}
 }
 
-func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Result, error) {
-	r := make([]rest.JSON, 0)
+func (dbh MariaDB) Select(table string, columns func() map[string]any) (db.Result, error) {
+	r := make([]db.JSON, 0)
 
 	column := columns()
 
 	cl := len(column)
 	if cl < 1 {
-		return rest.Result{
+		return db.Result{
 			LastID: nil,
 			Rows:   r,
 		}, nil
@@ -56,7 +56,7 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 	rows, err := dbh.conn.Query(fmt.Sprintf("SELECT %s FROM `%s`;", strings.Join(keys, ", "), table))
 
 	if err != nil {
-		return rest.Result{
+		return db.Result{
 			LastID: nil,
 			Rows:   r,
 		}, err
@@ -65,7 +65,7 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 	defer rows.Close()
 
 	if err != nil {
-		return rest.Result{
+		return db.Result{
 			LastID: nil,
 			Rows:   r,
 		}, err
@@ -83,13 +83,13 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 		}
 
 		if err := rows.Scan(vals...); err != nil {
-			return rest.Result{
+			return db.Result{
 				LastID: nil,
 				Rows:   r,
 			}, err
 		}
 
-		row := make(rest.JSON, len(column))
+		row := make(db.JSON, len(column))
 
 		i = 0
 		for _, v := range keys {
@@ -100,15 +100,15 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (rest.Res
 		r = append(r, row)
 	}
 
-	return rest.Result{
+	return db.Result{
 		LastID: nil,
 		Rows:   r,
 	}, rows.Err()
 }
 
-func (dbh MariaDB) Insert(table string, rows []map[string]string) (rest.Result, error) {
+func (dbh MariaDB) Insert(table string, rows []map[string]string) (db.Result, error) {
 	if len(rows) < 1 {
-		return rest.Result{
+		return db.Result{
 			LastID: nil,
 			Rows:   nil,
 		}, errors.New("No rows to be inserted")
@@ -136,7 +136,7 @@ func (dbh MariaDB) Insert(table string, rows []map[string]string) (rest.Result, 
 				//rowsvals[i][j] = "DEFAULT"
 				//rowsvals[i][j] = "NULL"
 				//continue
-				return rest.Result{
+				return db.Result{
 					LastID: nil,
 					Rows:   nil,
 				}, errors.New("Cannot find value for column")
@@ -175,41 +175,41 @@ func (dbh MariaDB) Insert(table string, rows []map[string]string) (rest.Result, 
 		last, lasterr := res.LastInsertId()
 
 		if lasterr != nil {
-			return rest.Result{
+			return db.Result{
 				LastID: nil,
 				Rows:   nil,
 			}, err
 		}
 
-		return rest.Result{
+		return db.Result{
 			LastID: &last,
 			Rows:   nil,
 		}, err
 	}
 
-	return rest.Result{
+	return db.Result{
 		LastID: nil,
 		Rows:   nil,
 	}, nil
 }
 
-func (dbh MariaDB) Update(table string, assignments []map[string]any, conditions []map[string]any) (rest.Result, error) {
-	r := make([]rest.JSON, 0)
-	return rest.Result{
+func (dbh MariaDB) Update(table string, assignments []map[string]any, conditions []map[string]any) (db.Result, error) {
+	r := make([]db.JSON, 0)
+	return db.Result{
 		LastID: nil,
 		Rows:   r,
 	}, nil
 }
 
-func (dbh MariaDB) Delete(table string, conditions []map[string]any) (rest.Result, error) {
-	r := make([]rest.JSON, 0)
-	return rest.Result{
+func (dbh MariaDB) Delete(table string, conditions []map[string]any) (db.Result, error) {
+	r := make([]db.JSON, 0)
+	return db.Result{
 		LastID: nil,
 		Rows:   r,
 	}, nil
 }
 
-func (dbh MariaDB) CreateTables(ts []rest.Table) error {
+func (dbh MariaDB) CreateTables(ts []db.Table) error {
 	for _, t := range ts {
 		_, err := dbh.conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);",
 			t.Name, strings.Join(t.Columns, ", ")))
@@ -223,11 +223,11 @@ func (dbh MariaDB) CreateTables(ts []rest.Table) error {
 	return nil
 }
 
-func (dbh MariaDB) CreateIndexes(ts []rest.Index) error {
+func (dbh MariaDB) CreateIndexes(ts []db.Index) error {
 	return nil
 }
 
-func (dbh MariaDB) CreateViews(ts []rest.View) error {
+func (dbh MariaDB) CreateViews(ts []db.View) error {
 	for _, t := range ts {
 		_, err := dbh.conn.Exec(fmt.Sprintf("CREATE OR REPLACE VIEW `%s` AS %s;",
 			t.Name, t.Select))

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
+	"github.com/bloqs-sites/bloqsenjin/internal/db"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
@@ -17,76 +18,14 @@ import (
 	pb "github.com/bloqs-sites/bloqsenjin/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	//"github.com/redis/go-redis/v9"
 )
 
 var (
 	httpPort = flag.Int("HTTPPort", 8080, "The HTTP server port")
 	gRPCPort = flag.Int("gRPCPort", 50051, "The gRPC server port")
 
-	auther = new(auth.Auther)
-
 	s *grpc.Server
 )
-
-type server struct {
-	pb.UnimplementedAuthServer
-}
-
-func (s *server) SignIn(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
-	switch x := in.Creds.(type) {
-	case *proto.Credentials_Basic:
-		if err := auther.SignInBasic(x); err != nil {
-			msg := err.Error()
-			return &pb.Validation{
-				Valid:   false,
-				Message: &msg,
-			}, err
-		}
-	case nil:
-		msg := ""
-		return &pb.Validation{
-			Valid:   false,
-			Message: &msg,
-		}, fmt.Errorf("")
-	default:
-		msg := ""
-		return &pb.Validation{
-			Valid:   false,
-			Message: &msg,
-		}, fmt.Errorf("Profile.Avatar has unexpected type %T", x)
-	}
-
-	return &pb.Validation{
-		Valid: true,
-	}, nil
-}
-
-func (s *server) SignOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
-	return &pb.Validation{
-		Valid: true,
-	}, nil
-}
-
-func (s *server) LogIn(ctx context.Context, in *pb.Credentials) (*pb.Token, error) {
-	var x uint64 = 4
-	return &pb.Token{
-		Jwt:         []byte(""),
-		Permissions: &x,
-	}, nil
-}
-
-func (s *server) LogOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
-	return &pb.Validation{
-		Valid: true,
-	}, nil
-}
-
-func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, error) {
-	return &pb.Validation{
-		Valid: auther.VerifyToken(string(in.GetJwt()), uint(*in.Permissions)),
-	}, nil
-}
 
 func main() {
 	flag.Parse()
@@ -104,18 +43,6 @@ func main() {
 			}
 		}
 	}
-
-	//rdb := redis.NewClient(&redis.Options{
-	//	Addr:     "localhost:6379",
-	//	Password: "",
-	//	DB:       0,
-	//})
-
-	//err = rdb.Set(context.Background(), "mykey", "myvalue", 0).Err()
-
-	//if err != nil {
-	//    panic(err);
-	//}
 }
 
 func startGRPCServer(ch chan error) {
@@ -125,7 +52,10 @@ func startGRPCServer(ch chan error) {
 	}
 
 	s = grpc.NewServer()
-	pb.RegisterAuthServer(s, &server{})
+	auther := auth.NewAuther(db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0)))
+	pb.RegisterAuthServer(s, &server{
+		auther: *auther,
+	})
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		ch <- err
@@ -133,7 +63,7 @@ func startGRPCServer(ch chan error) {
 }
 
 func createGRPCClient(ch chan error) (pb.AuthClient, func()) {
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", *gRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(net.JoinHostPort("localhost", fmt.Sprint(*gRPCPort)), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		ch <- err
 	}
@@ -203,4 +133,65 @@ func startHTTPServer(ch chan error) {
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
 	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), r)
+}
+
+type server struct {
+	pb.UnimplementedAuthServer
+
+	auther auth.Auther
+}
+
+func (s *server) SignIn(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	switch x := in.Creds.(type) {
+	case *proto.Credentials_Basic:
+		if err := s.auther.SignInBasic(ctx, x); err != nil {
+			msg := err.Error()
+			return &pb.Validation{
+				Valid:   false,
+				Message: &msg,
+			}, err
+		}
+	case nil:
+		msg := ""
+		return &pb.Validation{
+			Valid:   false,
+			Message: &msg,
+		}, fmt.Errorf("")
+	default:
+		msg := ""
+		return &pb.Validation{
+			Valid:   false,
+			Message: &msg,
+		}, fmt.Errorf("Profile.Avatar has unexpected type %T", x)
+	}
+
+	return &pb.Validation{
+		Valid: true,
+	}, nil
+}
+
+func (s *server) SignOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	return &pb.Validation{
+		Valid: true,
+	}, nil
+}
+
+func (s *server) LogIn(ctx context.Context, in *pb.Credentials) (*pb.Token, error) {
+	var x uint64 = 4
+	return &pb.Token{
+		Jwt:         []byte(""),
+		Permissions: &x,
+	}, nil
+}
+
+func (s *server) LogOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
+	return &pb.Validation{
+		Valid: true,
+	}, nil
+}
+
+func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, error) {
+	return &pb.Validation{
+		Valid: s.auther.VerifyToken(string(in.GetJwt()), uint(*in.Permissions)),
+	}, nil
 }

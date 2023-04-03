@@ -4,43 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	pb "github.com/bloqs-sites/bloqsenjin/proto"
 
+	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 )
 
 type Server struct {
 	port string
 	mux  *mux.Router
-	dbh  *DataManipulater
+	dbh  *db.DataManipulater
 	auth pb.AuthClient
 }
 
-func NewServer(port string, crud DataManipulater, auth pb.AuthClient) Server {
+func NewServer(port string, crud db.DataManipulater, auth pb.AuthClient) Server {
 	return Server{
 		port: port,
 		mux:  mux.NewRouter(),
 		dbh:  &crud,
 		auth: auth,
 	}
-}
-
-type Result struct {
-	LastID *int64
-	Rows   []JSON
-}
-
-type DataManipulater interface {
-	Select(table string, columns func() map[string]any) (Result, error)
-	Insert(table string, rows []map[string]string) (Result, error)
-	Update(table string, assignments []map[string]any, conditions []map[string]any) (Result, error)
-	Delete(table string, conditions []map[string]any) (Result, error)
-
-	CreateTables([]Table) error
-	CreateIndexes([]Index) error
-	CreateViews([]View) error
 }
 
 func (s Server) AttachHandler(route string, h Handler) {
@@ -75,7 +59,7 @@ func (s Server) AttachHandler(route string, h Handler) {
 	})
 }
 
-func (s *Server) GetDB() *DataManipulater {
+func (s *Server) GetDB() *db.DataManipulater {
 	return s.dbh
 }
 

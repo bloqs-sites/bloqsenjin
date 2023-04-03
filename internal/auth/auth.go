@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -54,7 +56,13 @@ type claims struct {
 	jwt.RegisteredClaims
 }
 
-type Auther struct{}
+type Auther struct {
+	kv db.KVDBer
+}
+
+func NewAuther(kv db.KVDBer) *Auther {
+	return &Auther{kv}
+}
 
 func (a Auther) GenToken(p auth.Payload) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
@@ -101,7 +109,7 @@ func (a Auther) VerifyToken(t string, auths uint) bool {
 	return false
 }
 
-func (a *Auther) SignInBasic(c *proto.Credentials_Basic) error {
+func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
 	if err := a.verifyEmail(c.Basic.GetEmail()); err != nil {
 		return err
 	}
@@ -111,9 +119,7 @@ func (a *Auther) SignInBasic(c *proto.Credentials_Basic) error {
 		return err
 	}
 
-	fmt.Println(hash, string(hash))
-
-	return nil
+	return a.kv.Put(ctx, []byte(c.Basic.GetEmail()), hash)
 }
 
 func (a *Auther) verifyEmail(email string) error {

@@ -91,10 +91,19 @@ func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, er
 func main() {
 	flag.Parse()
 
-	go startGRPCServer()
-	if err := startHTTPServer(); err != nil {
-		panic(err)
-	}
+    ch := make(chan error)
+
+	go startGRPCServer(ch)
+    go startHTTPServer(ch)
+
+    for {
+        select {
+        case err := <- ch:
+                if err != nil {
+                    panic(err);
+                }
+        }
+    }
 
 	//rdb := redis.NewClient(&redis.Options{
 	//	Addr:     "localhost:6379",
@@ -109,7 +118,7 @@ func main() {
 	//}
 }
 
-func startGRPCServer() {
+func startGRPCServer(ch chan error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *gRPCPort))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -119,7 +128,7 @@ func startGRPCServer() {
 	pb.RegisterAuthServer(s, &server{})
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		ch <- err
 	}
 }
 
@@ -132,7 +141,7 @@ func createGRPCClient() pb.AuthClient {
 	return pb.NewAuthClient(conn)
 }
 
-func startHTTPServer() error {
+func startHTTPServer(ch chan error) {
 	route := conf.MustGetConfOrDefault("/", "auth", "signInPath")
 	query := conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
 
@@ -185,5 +194,5 @@ func startHTTPServer() error {
 	})
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
-	return http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), r)
+	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), r)
 }

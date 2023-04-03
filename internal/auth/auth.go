@@ -23,7 +23,7 @@ var (
 
 	hostname string
 
-	domains_list map[string][]string
+	domains_list = conf.MustGetConfOrDefault[map[string][]string](nil, "domains")
 )
 
 const (
@@ -46,12 +46,6 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
-    if domains, ok := conf.MustGetConf("domains").(map[string][]string); ok {
-        domains_list = domains
-    } else {
-        domains_list = nil
-    }
 }
 
 type claims struct {
@@ -184,9 +178,9 @@ func (a *Auther) verifyEmail(email string) error {
 }
 
 func getDomainsListType() ([]string, int) {
-    if domains_list == nil {
-	    return nil, domains_nil
-    }
+	if domains_list == nil {
+		return nil, domains_nil
+	}
 
 	if v, ok := domains_list["blacklist"]; ok {
 		return v, domains_blacklist

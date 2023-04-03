@@ -91,19 +91,19 @@ func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, er
 func main() {
 	flag.Parse()
 
-    ch := make(chan error)
+	ch := make(chan error)
 
 	go startGRPCServer(ch)
-    go startHTTPServer(ch)
+	go startHTTPServer(ch)
 
-    for {
-        select {
-        case err := <- ch:
-                if err != nil {
-                    panic(err);
-                }
-        }
-    }
+	for {
+		select {
+		case err := <-ch:
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
 
 	//rdb := redis.NewClient(&redis.Options{
 	//	Addr:     "localhost:6379",

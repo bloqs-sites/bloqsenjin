@@ -1,7 +1,9 @@
 package auth
 
+import "github.com/bloqs-sites/bloqsenjin/pkg/auth"
+
 const (
-	CREATE_PREFERENCE uint64 = 1 << iota
+	CREATE_PREFERENCE auth.Permissions = 1 << iota
 	UPDATE_PREFERENCE
 	DELETE_PREFERENCE
 

@@ -23,7 +23,6 @@ type Tokener interface {
 
 type Auther interface {
 	SignInBasic(context.Context, *proto.Credentials_Basic) error
-	SignOutBasic(context.Context, *proto.Credentials_Basic, *proto.Token, *Tokener) error
-	GrantTokenBasic(context.Context, *proto.CredentialsWantPermissions) (Token, error)
+	SignOutBasic(context.Context, *proto.Credentials_Basic, *proto.Token, Tokener) error
+	GrantTokenBasic(context.Context, *proto.Credentials_Basic, Permissions, Tokener) (Token, error)
 }
-

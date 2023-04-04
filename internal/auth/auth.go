@@ -3,7 +3,6 @@ package auth
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -12,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
@@ -60,91 +58,52 @@ type claims struct {
 	jwt.RegisteredClaims
 }
 
-type Auther struct {
+type BloqsAuther struct {
 	creds   db.KVDBer
-	secrets db.KVDBer
+}
+func NewBloqsAuther(creds db.KVDBer) *BloqsAuther {
+	return &BloqsAuther{creds}
 }
 
-func NewAuther(creds, secrets db.KVDBer) *Auther {
-	return &Auther{creds: creds, secrets: secrets}
-}
+func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
+	if err := verifyEmail(c.Basic.GetEmail()); err != nil {
+		return err
+	}
 
-func (a *Auther) genToken(ctx context.Context, p auth.Payload) string {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
-		p,
-		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "bloqsenjin",
-			Subject:   p.Client,
-		},
-	})
-
-	key := fmt.Sprintf(jwt_prefix, p.Client)
-
-	secrets, err := a.secrets.Get(ctx, key)
-
-    var secret []byte
-    ok := true
-
+	hash, err := bcrypt.GenerateFromPassword([]byte(c.Basic.GetPassword()), bcrypt.DefaultCost)
 	if err != nil {
-		ok = false
+		return err
 	}
 
-    if ok {
-	    secret, ok = secrets[key]
-    }
-
-	if !ok {
-		secret := make([]byte, 24)
-		_, err := rand.Read(secret)
-
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	tokenstr, err := token.SignedString(secret)
-
-	if err != nil {
-		panic(err)
-	}
-
-	if !ok {
-		puts := make(map[string][]byte, 1)
-		puts[key] = secret
-		a.secrets.Put(ctx, puts, 7*time.Minute)
-	}
-
-	return tokenstr
+	return a.creds.Put(ctx, map[string][]byte{
+		fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()): hash,
+	}, 0)
 }
 
-func (a Auther) VerifyToken(ctx context.Context, t string, auths uint64) bool {
-	token, err := jwt.ParseWithClaims(t, &claims{}, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("")
-		}
-
-		return []byte("secret"), nil
-	}, jwt.WithValidMethods([]string{}))
-
-	if err != nil {
-		return false
+func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic, tk *proto.Token, t *auth.Tokener) error {
+	if err := a.CheckAccessBasic(ctx, c); err != nil {
+		return err
 	}
 
-	if claims, ok := token.Claims.(*claims); ok && token.Valid {
-		return (claims.Payload.Permissions & auths) == auths
-	} else if errors.Is(err, jwt.ErrTokenMalformed) {
-		return false
-	} else if errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet) {
-		return false
+	if err := a.creds.Delete(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())); err != nil {
+		return err
 	}
 
-	return false
+	return nil
 }
 
-func (a *Auther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
+func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_Basic, p auth.Permissions, t auth.Tokener) (auth.Token, error) {
+	if err := a.CheckAccessBasic(ctx, c); err != nil {
+		return "", err
+	}
+
+    return t.GenToken(ctx, &auth.Payload{
+        Client: c.Basic.Email,
+        Permissions: p,
+    })
+}
+
+func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
 	hashes, err := a.creds.Get(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))
 
 	if err != nil {
@@ -160,46 +119,7 @@ func (a *Auther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basi
 	return nil
 }
 
-func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
-	if err := a.verifyEmail(c.Basic.GetEmail()); err != nil {
-		return err
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(c.Basic.GetPassword()), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	return a.creds.Put(ctx, map[string][]byte{
-		fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()): hash,
-	}, 0)
-}
-
-func (a *Auther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic) error {
-	if err := a.CheckAccessBasic(ctx, c); err != nil {
-		return err
-	}
-
-	if err := a.creds.Delete(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (a *Auther) GrantPermissionsBasic(ctx context.Context, c *proto.CredentialsWantPermissions) (string, error) {
-	creds := c.Credentials.Creds.(*proto.Credentials_Basic)
-	if err := a.CheckAccessBasic(ctx, creds); err != nil {
-		return "", err
-	}
-
-	return a.genToken(ctx, auth.Payload{
-		Client:      creds.Basic.Email,
-		Permissions: c.Permissions,
-	}), nil
-}
-
-func (a *Auther) verifyEmail(email string) error {
+func verifyEmail(email string) error {
 	valid := email_regex.Match([]byte(email))
 
 	if !valid {
@@ -247,9 +167,9 @@ func (a *Auther) verifyEmail(email string) error {
 				}
 			}
 		}
-		go a.smtpVerify(ch, email, i.Host)
+		go smtpVerify(ch, email, i.Host)
 	}
-	go a.smtpVerify(ch, email, email_domain)
+	go smtpVerify(ch, email, email_domain)
 
 	for {
 		select {
@@ -303,7 +223,7 @@ func newErrorCloseClosure(err error, con net.Conn) errorCloseClosure {
 		close,
 	}
 }
-func (a *Auther) smtpVerify(ch chan errorCloseClosure, email, mx string) {
+func smtpVerify(ch chan errorCloseClosure, email, mx string) {
 	con, err := net.Dial("tcp", net.JoinHostPort(mx, strconv.Itoa(25)))
 
 	if err != nil {

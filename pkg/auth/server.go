@@ -65,23 +65,34 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.CredentialsWantPermiss
 		token Token
 		err   error
 	    permissions = NO_PERMISSIONS
+        validation *proto.Validation
 	)
 
 	switch x := in.Credentials.Credentials.(type) {
 	case *proto.Credentials_Basic:
-		token, err = s.auther.GrantTokenBasic(ctx, in)
+		token, err = s.auther.GrantTokenBasic(ctx, x, Permissions(in.Permissions))
 	case nil:
-		err = fmt.Errorf("")
+		err = errors.New("Credentials cannot be nil")
 	default:
 		err = fmt.Errorf("Credentials.Creds has unexpected type %T", x)
 	}
 
-	if err != nil {
+	if err == nil {
 		permissions = Permissions(in.Permissions)
 	}
 
+    if err == nil {
+		if id := credentialsToID(in.Credentials); id != nil {
+			validation = valid(fmt.Sprintf("The Credentials for `%s` are valid, here is your token!", *id))
+		} else {
+		    validation = valid("The Credentials are valid, here is your token!")
+		}
+    } else {
+        validation = errorToValidation(err)
+    }
+
     return &proto.TokenValidation{
-        Validation: valid(""),
+        Validation: validation,
         Token: &proto.Token{
             Jwt: []byte(token),
             Permissions: (*uint64)(&permissions),
@@ -89,7 +100,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.CredentialsWantPermiss
     }, err
 }
 
-func (s *AuthServer) LogOut(ctx context.Context, in *proto.Credentials) (*proto.Validation, error) {
+func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
 	return &proto.Validation{
 		Valid: true,
 	}, nil
@@ -97,6 +108,6 @@ func (s *AuthServer) LogOut(ctx context.Context, in *proto.Credentials) (*proto.
 
 func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
 	return &proto.Validation{
-		Valid: s.tokener.VerifyToken(ctx, Token(in.GetJwt()), Permissions(*in.Permissions)),
+		Valid: s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions)),
 	}, nil
 }

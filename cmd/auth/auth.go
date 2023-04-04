@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,8 +11,10 @@ import (
 	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
-	"github.com/bloqs-sites/bloqsenjin/internal/db"
+	dbh "github.com/bloqs-sites/bloqsenjin/internal/db"
+	auth_server "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 
@@ -34,7 +35,12 @@ func main() {
 
 	ch := make(chan error)
 
-	go startGRPCServer(ch)
+    // TODO: This needs to be credentials and at the same time have support for
+    // the various db.KVDBer
+	creds := dbh.NewKeyDB(dbh.NewRedisCreds("localhost", 6379, "", 0))
+	secrets := dbh.NewKeyDB(dbh.NewRedisCreds("localhost", 6379, "", 0))
+
+	go startGRPCServer(ch, creds, secrets)
 	go startHTTPServer(ch)
 
 	for {
@@ -47,7 +53,7 @@ func main() {
 	}
 }
 
-func startGRPCServer(ch chan error) {
+func startGRPCServer(ch chan error, creds, secrets db.KVDBer) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *gRPCPort))
 	if err != nil {
 		ch <- err
@@ -55,14 +61,9 @@ func startGRPCServer(ch chan error) {
 
 	s = grpc.NewServer()
 
-	credskv := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))
-	secretskv := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))
+	auther := auth.NewAuther(creds, secrets)
 
-	auther := auth.NewAuther(credskv, secretskv)
-
-	pb.RegisterAuthServer(s, &server{
-		auther: *auther,
-	})
+	pb.RegisterAuthServer(s, auth_server.NewAuthServer(auther, auther))
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		ch <- err
@@ -151,108 +152,6 @@ func startHTTPServer(ch chan error) {
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
 	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), r)
-}
-
-type server struct {
-	pb.UnimplementedAuthServer
-
-	auther auth.Auther
-}
-
-func (s *server) SignIn(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
-	switch x := in.Creds.(type) {
-	case *proto.Credentials_Basic:
-		if err := s.auther.SignInBasic(ctx, x); err != nil {
-			msg := err.Error()
-			return &pb.Validation{
-				Valid:   false,
-				Message: &msg,
-			}, err
-		}
-	case nil:
-		msg := ""
-		return &pb.Validation{
-			Valid:   false,
-			Message: &msg,
-		}, fmt.Errorf("")
-	default:
-		msg := ""
-		return &pb.Validation{
-			Valid:   false,
-			Message: &msg,
-		}, fmt.Errorf("Credentials.Creds has unexpected type %T", x)
-	}
-
-	return &pb.Validation{
-		Valid: true,
-	}, nil
-}
-
-func (s *server) SignOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
-	switch x := in.Creds.(type) {
-	case *proto.Credentials_Basic:
-		if err := s.auther.SignOutBasic(ctx, x); err != nil {
-			msg := err.Error()
-			return &pb.Validation{
-				Valid:   false,
-				Message: &msg,
-			}, err
-		}
-	case nil:
-		msg := ""
-		return &pb.Validation{
-			Valid:   false,
-			Message: &msg,
-		}, fmt.Errorf("")
-	default:
-		msg := ""
-		return &pb.Validation{
-			Valid:   false,
-			Message: &msg,
-		}, fmt.Errorf("Credentials.Creds has unexpected type %T", x)
-	}
-
-	return &pb.Validation{
-		Valid: true,
-	}, nil
-}
-
-func (s *server) LogIn(ctx context.Context, in *pb.CredentialsWantPermissions) (*pb.Token, error) {
-    var (
-        token string
-        err error
-    )
-
-    permissions := auth.NO_PERMISSIONS
-    switch x := in.Credentials.Creds.(type) {
-	case *proto.Credentials_Basic:
-		token, err = s.auther.GrantPermissionsBasic(ctx, in)
-	case nil:
-		err = fmt.Errorf("")
-	default:
-		err = fmt.Errorf("Credentials.Creds has unexpected type %T", x)
-	}
-
-    if err != nil {
-        permissions = in.Permissions
-    }
-
-	return &pb.Token{
-        Jwt: []byte(token),
-        Permissions: &permissions,
-	}, err
-}
-
-func (s *server) LogOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
-	return &pb.Validation{
-		Valid: true,
-	}, nil
-}
-
-func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, error) {
-	return &pb.Validation{
-		Valid: s.auther.VerifyToken(ctx, string(in.GetJwt()), *in.Permissions),
-	}, nil
 }
 
 func validationRoute(ch chan error, match func(string, pb.AuthClient, *http.Request) (*pb.Validation, error)) func(http.ResponseWriter, *http.Request) {

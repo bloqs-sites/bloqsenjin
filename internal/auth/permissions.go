@@ -1,8 +1,6 @@
 package auth
 
 const (
-	NO_PERMISSIONS uint64 = 0
-
 	CREATE_PREFERENCE uint64 = 1 << iota
 	UPDATE_PREFERENCE
 	DELETE_PREFERENCE

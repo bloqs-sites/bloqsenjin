@@ -96,3 +96,9 @@ func (db *KeyDB) List(ctx context.Context, prefix *string, limit *uint) (keys []
 func (db *KeyDB) DeleteAll(ctx context.Context) error {
     return db.rdb.FlushDBAsync(ctx).Err()
 }
+
+func (db *KeyDB) Head(ctx context.Context, key ...string) (bool, error) {
+    count, err := db.rdb.Exists(ctx, key...).Result()
+
+    return count >= int64(len(key)), err
+}

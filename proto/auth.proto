@@ -7,7 +7,7 @@ package bloqs.auth;
 service Auth {
   rpc SignIn(Credentials) returns (Validation);
   rpc SignOut(Credentials) returns (Validation);
-  rpc LogIn(Credentials) returns (Token);
+  rpc LogIn(CredentialsWantPermissions) returns (Token);
   rpc LogOut(Credentials) returns (Validation);
   rpc Validate(Token) returns (Validation);
 }
@@ -17,11 +17,16 @@ message Credentials {
   oneof creds {
     BasicCredentials basic = 2;
   } // required
+
+  message BasicCredentials {
+    string email = 1; // required
+    string password = 2; // required
+  }
 }
 
-message BasicCredentials {
-  string email = 1; // required
-  string password = 2; // required
+message CredentialsWantPermissions {
+  Credentials credentials = 1; // required
+  uint64 permissions = 2; // required
 }
 
 message Token {

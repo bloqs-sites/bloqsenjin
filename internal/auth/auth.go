@@ -3,6 +3,7 @@ package auth
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -36,7 +37,8 @@ const (
 	domains_whitelist
 	domains_nil
 
-	basic_email_prefix = "basic:email:%s"
+	basic_email_prefix = "creds:basic:email:%s"
+	jwt_prefix         = "token:jwt:%s"
 )
 
 func init() {
@@ -59,14 +61,15 @@ type claims struct {
 }
 
 type Auther struct {
-	kv db.KVDBer
+	creds   db.KVDBer
+	secrets db.KVDBer
 }
 
-func NewAuther(kv db.KVDBer) *Auther {
-	return &Auther{kv}
+func NewAuther(creds, secrets db.KVDBer) *Auther {
+	return &Auther{creds: creds, secrets: secrets}
 }
 
-func (a Auther) GenToken(p auth.Payload) string {
+func (a *Auther) genToken(ctx context.Context, p auth.Payload) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
 		p,
 		jwt.RegisteredClaims{
@@ -78,16 +81,46 @@ func (a Auther) GenToken(p auth.Payload) string {
 		},
 	})
 
-	tokenstr, err := token.SignedString([]byte("secret"))
+	key := fmt.Sprintf(jwt_prefix, p.Client)
+
+	secrets, err := a.secrets.Get(ctx, key)
+
+    var secret []byte
+    ok := true
+
+	if err != nil {
+		ok = false
+	}
+
+    if ok {
+	    secret, ok = secrets[key]
+    }
+
+	if !ok {
+		secret := make([]byte, 24)
+		_, err := rand.Read(secret)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	tokenstr, err := token.SignedString(secret)
 
 	if err != nil {
 		panic(err)
 	}
 
+	if !ok {
+		puts := make(map[string][]byte, 1)
+		puts[key] = secret
+		a.secrets.Put(ctx, puts, 7*time.Minute)
+	}
+
 	return tokenstr
 }
 
-func (a Auther) VerifyToken(t string, auths uint) bool {
+func (a Auther) VerifyToken(ctx context.Context, t string, auths uint64) bool {
 	token, err := jwt.ParseWithClaims(t, &claims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("")
@@ -111,9 +144,23 @@ func (a Auther) VerifyToken(t string, auths uint) bool {
 	return false
 }
 
+func (a *Auther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
+	hashes, err := a.creds.Get(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))
+
+	if err != nil {
+		return err
+	}
+
+	hash := hashes[fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())]
+
+	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
-    i, j, k := a.kv.List(ctx, nil, nil)
-    fmt.Println(i, j ,k)
 	if err := a.verifyEmail(c.Basic.GetEmail()); err != nil {
 		return err
 	}
@@ -123,29 +170,33 @@ func (a *Auther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) er
 		return err
 	}
 
-    return a.kv.Put(ctx, map[string][]byte{
-        fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()): hash,
-    }, 0)
+	return a.creds.Put(ctx, map[string][]byte{
+		fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()): hash,
+	}, 0)
 }
 
 func (a *Auther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic) error {
-	hashes, err := a.kv.Get(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))
-
-	if err != nil {
+	if err := a.CheckAccessBasic(ctx, c); err != nil {
 		return err
 	}
 
-    hash := hashes[fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())]
-
-	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
-		return err
-	}
-
-	if err := a.kv.Delete(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())); err != nil {
+	if err := a.creds.Delete(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (a *Auther) GrantPermissionsBasic(ctx context.Context, c *proto.CredentialsWantPermissions) (string, error) {
+	creds := c.Credentials.Creds.(*proto.Credentials_Basic)
+	if err := a.CheckAccessBasic(ctx, creds); err != nil {
+		return "", err
+	}
+
+	return a.genToken(ctx, auth.Payload{
+		Client:      creds.Basic.Email,
+		Permissions: c.Permissions,
+	}), nil
 }
 
 func (a *Auther) verifyEmail(email string) error {

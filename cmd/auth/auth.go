@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
@@ -52,7 +54,12 @@ func startGRPCServer(ch chan error) {
 	}
 
 	s = grpc.NewServer()
-	auther := auth.NewAuther(db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0)))
+
+	credskv := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))
+	secretskv := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))
+
+	auther := auth.NewAuther(credskv, secretskv)
+
 	pb.RegisterAuthServer(s, &server{
 		auther: *auther,
 	})
@@ -74,15 +81,17 @@ func createGRPCClient(ch chan error) (pb.AuthClient, func()) {
 
 func startHTTPServer(ch chan error) {
 	sign_in_route := conf.MustGetConfOrDefault("/sign-in", "auth", "signInPath")
-	sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signInPath")
+	sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signOutPath")
+	log_in_route := conf.MustGetConfOrDefault("/log-in", "auth", "logInPath")
+	log_out_route := conf.MustGetConfOrDefault("/log-out", "auth", "logOutPath")
 
 	r := mux.NewRouter()
-	r.Route(sign_in_route, authRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
+	r.Route(sign_in_route, validationRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
 		switch t {
 		case "basic":
 			v, err = c.SignIn(r.Context(), &pb.Credentials{
 				Creds: &proto.Credentials_Basic{
-					Basic: &pb.BasicCredentials{
+					Basic: &pb.Credentials_BasicCredentials{
 						Email:    r.Form["email"][0],
 						Password: r.Form["pass"][0],
 					},
@@ -92,18 +101,51 @@ func startHTTPServer(ch chan error) {
 		return
 	}))
 
-	r.Route(sign_out_route, authRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
+	r.Route(sign_out_route, validationRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
 		switch t {
 		case "basic":
 			v, err = c.SignOut(r.Context(), &pb.Credentials{
 				Creds: &proto.Credentials_Basic{
-					Basic: &pb.BasicCredentials{
+					Basic: &pb.Credentials_BasicCredentials{
 						Email:    r.Form["email"][0],
 						Password: r.Form["pass"][0],
 					},
 				},
 			})
 		}
+		return
+	}))
+
+	r.Route(log_in_route, tokenRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (tk *pb.Token, err error) {
+        permissionsStr := r.FormValue("permissions")
+        if permissionsStr == "" {
+            permissionsStr = strconv.Itoa(int(auth.DEFAULT_PERMISSIONS))
+        }
+        permissions, err := strconv.ParseUint(permissionsStr, 10, 0)
+
+        if err != nil {
+            return
+        }
+
+		switch t {
+		case "basic":
+			tk, err = c.LogIn(r.Context(), &pb.CredentialsWantPermissions{
+				Credentials: &pb.Credentials{
+					Creds: &proto.Credentials_Basic{
+						Basic: &pb.Credentials_BasicCredentials{
+							Email:    r.Form["email"][0],
+							Password: r.Form["pass"][0],
+						},
+					},
+				},
+                Permissions:  permissions,
+			})
+		}
+
+		return
+	}))
+
+	r.Route(log_out_route, validationRoute(ch, func(t string, c pb.AuthClient, r *http.Request) (v *pb.Validation, err error) {
 		return
 	}))
 
@@ -175,12 +217,30 @@ func (s *server) SignOut(ctx context.Context, in *pb.Credentials) (*pb.Validatio
 	}, nil
 }
 
-func (s *server) LogIn(ctx context.Context, in *pb.Credentials) (*pb.Token, error) {
-	var x uint64 = 4
+func (s *server) LogIn(ctx context.Context, in *pb.CredentialsWantPermissions) (*pb.Token, error) {
+    var (
+        token string
+        err error
+    )
+
+    permissions := auth.NO_PERMISSIONS
+    switch x := in.Credentials.Creds.(type) {
+	case *proto.Credentials_Basic:
+		token, err = s.auther.GrantPermissionsBasic(ctx, in)
+	case nil:
+		err = fmt.Errorf("")
+	default:
+		err = fmt.Errorf("Credentials.Creds has unexpected type %T", x)
+	}
+
+    if err != nil {
+        permissions = in.Permissions
+    }
+
 	return &pb.Token{
-		Jwt:         []byte(""),
-		Permissions: &x,
-	}, nil
+        Jwt: []byte(token),
+        Permissions: &permissions,
+	}, err
 }
 
 func (s *server) LogOut(ctx context.Context, in *pb.Credentials) (*pb.Validation, error) {
@@ -191,11 +251,11 @@ func (s *server) LogOut(ctx context.Context, in *pb.Credentials) (*pb.Validation
 
 func (s *server) Validate(ctx context.Context, in *pb.Token) (*pb.Validation, error) {
 	return &pb.Validation{
-		Valid: s.auther.VerifyToken(string(in.GetJwt()), uint(*in.Permissions)),
+		Valid: s.auther.VerifyToken(ctx, string(in.GetJwt()), *in.Permissions),
 	}, nil
 }
 
-func authRoute(ch chan error, match func(string, pb.AuthClient, *http.Request) (*pb.Validation, error)) func(http.ResponseWriter, *http.Request) {
+func validationRoute(ch chan error, match func(string, pb.AuthClient, *http.Request) (*pb.Validation, error)) func(http.ResponseWriter, *http.Request) {
 	query := conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +296,48 @@ func authRoute(ch chan error, match func(string, pb.AuthClient, *http.Request) (
 			w.WriteHeader(200)
 		} else {
 			w.WriteHeader(400)
+		}
+	}
+}
+
+func tokenRoute(ch chan error, match func(string, pb.AuthClient, *http.Request) (*pb.Token, error)) func(http.ResponseWriter, *http.Request) {
+	query := conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			s.ServeHTTP(w, r)
+			return
+		}
+
+		var err error
+
+		if err = r.ParseMultipartForm(64 << 20); err != nil {
+			return
+		}
+
+		var t *pb.Token
+
+		c, cc := createGRPCClient(ch)
+		defer cc()
+
+		t, err = match(r.URL.Query().Get(query), c, r)
+
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			w.WriteHeader(500)
+			return
+		}
+
+		if t == nil {
+			w.WriteHeader(400)
+			return
+		}
+
+		w.Header().Add("BLOQS_JWT", string(t.Jwt))
+		w.Header().Add("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(t); err != nil {
+			w.WriteHeader(500)
 		}
 	}
 }

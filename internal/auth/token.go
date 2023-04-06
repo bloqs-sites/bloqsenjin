@@ -13,15 +13,16 @@ import (
 )
 
 type BloqsTokener struct {
-    secrets db.KVDBer
+	secrets db.KVDBer
 }
+
 func NewBloqsTokener(secrets db.KVDBer) *BloqsTokener {
 	return &BloqsTokener{secrets}
 }
 
-func (t *BloqsTokener) genToken(ctx context.Context, p auth.Payload) string {
+func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (auth.Token, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
-		p,
+		*p,
 		jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -35,19 +36,19 @@ func (t *BloqsTokener) genToken(ctx context.Context, p auth.Payload) string {
 
 	secrets, err := t.secrets.Get(ctx, key)
 
-    var secret []byte
-    ok := true
+	var secret []byte
+	ok := true
 
 	if err != nil {
 		ok = false
 	}
 
-    if ok {
-	    secret, ok = secrets[key]
-    }
+	if ok {
+		secret, ok = secrets[key]
+	}
 
 	if !ok {
-		secret := make([]byte, 24)
+		secret := make([]byte, 32)
 		_, err := rand.Read(secret)
 
 		if err != nil {
@@ -67,7 +68,7 @@ func (t *BloqsTokener) genToken(ctx context.Context, p auth.Payload) string {
 		t.secrets.Put(ctx, puts, 7*time.Minute)
 	}
 
-	return tokenstr
+	return auth.Token(tokenstr), err
 }
 
 func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Permissions) bool {
@@ -93,4 +94,3 @@ func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Pe
 
 	return false
 }
-

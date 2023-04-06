@@ -79,26 +79,26 @@ func (db *KeyDB) Delete(ctx context.Context, key ...string) error {
 }
 
 func (db *KeyDB) List(ctx context.Context, prefix *string, limit *uint) (keys []string, cursor uint64, err error) {
-    var max int64 = 1000
-    if limit != nil {
-        max = int64(*limit)
-    }
+	var max int64 = 1000
+	if limit != nil {
+		max = int64(*limit)
+	}
 
-    if limit != nil {
-        keys, _, err = db.rdb.Scan(ctx, cursor, fmt.Sprintf("%s*", *prefix), max).Result()
-    } else {
-        keys, _, err = db.rdb.Scan(ctx, cursor, "*", max).Result()
-    }
+	if limit != nil {
+		keys, _, err = db.rdb.Scan(ctx, cursor, fmt.Sprintf("%s*", *prefix), max).Result()
+	} else {
+		keys, _, err = db.rdb.Scan(ctx, cursor, "*", max).Result()
+	}
 
 	return
 }
 
 func (db *KeyDB) DeleteAll(ctx context.Context) error {
-    return db.rdb.FlushDBAsync(ctx).Err()
+	return db.rdb.FlushDBAsync(ctx).Err()
 }
 
 func (db *KeyDB) Head(ctx context.Context, key ...string) (bool, error) {
-    count, err := db.rdb.Exists(ctx, key...).Result()
+	count, err := db.rdb.Exists(ctx, key...).Result()
 
-    return count >= int64(len(key)), err
+	return count >= int64(len(key)), err
 }

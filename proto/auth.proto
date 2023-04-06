@@ -32,6 +32,7 @@ message Token {
 message Validation {
   bool valid = 1; // required
   optional string message = 2;
+  optional uint32 http_status_code = 3;
 }
 
 message CredentialsWantPermissions {

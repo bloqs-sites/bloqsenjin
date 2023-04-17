@@ -6,10 +6,11 @@ package bloqs.auth;
 
 service Auth {
   rpc SignIn(Credentials) returns (Validation);
-  rpc SignOut(CredentialsWithToken) returns (Validation);
-  rpc LogIn(CredentialsWantPermissions) returns (TokenValidation);
+  rpc SignOut(Token) returns (Validation);
+  rpc LogIn(AskPermissions) returns (TokenValidation);
   rpc LogOut(Token) returns (Validation);
   rpc Validate(Token) returns (Validation);
+  rpc Revoke(Token) returns (Validation);
 }
 
 message Credentials {
@@ -35,7 +36,7 @@ message Validation {
   optional uint32 http_status_code = 3;
 }
 
-message CredentialsWantPermissions {
+message AskPermissions {
   Credentials credentials = 1; // required
   uint64 permissions = 2; // required
 }

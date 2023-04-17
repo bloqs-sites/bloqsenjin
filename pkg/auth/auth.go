@@ -8,8 +8,15 @@ import (
 
 type Token string
 type Permissions uint64
+type AuthType uint8
 
-const NO_PERMISSIONS Permissions = 0
+const (
+	NIL                        Permissions = 0
+	SIGN_OUT                               = 1 << iota
+	NEEDLE_FOR_NEXT_PERMISSION             = iota
+
+	BASIC_EMAIL AuthType = iota - NEEDLE_FOR_NEXT_PERMISSION
+)
 
 type Payload struct {
 	Client      string

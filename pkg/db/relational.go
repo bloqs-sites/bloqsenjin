@@ -1,8 +1,10 @@
 package db
 
+import "context"
+
 type Table struct {
-	Name    string
-	Columns []string
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
 }
 
 type Index struct {
@@ -24,14 +26,14 @@ type Mapper interface {
 }
 
 type DataManipulater interface {
-	Select(table string, columns func() map[string]any) (Result, error)
-	Insert(table string, rows []map[string]string) (Result, error)
-	Update(table string, assignments []map[string]any, conditions []map[string]any) (Result, error)
-	Delete(table string, conditions []map[string]any) (Result, error)
+	Select(ctx context.Context, table string, columns func() map[string]any) (Result, error)
+	Insert(ctx context.Context, table string, rows []map[string]string) (Result, error)
+	Update(ctx context.Context, table string, assignments []map[string]any, conditions []map[string]any) (Result, error)
+	Delete(ctx context.Context, table string, conditions []map[string]any) (Result, error)
 
-	CreateTables([]Table) error
-	CreateIndexes([]Index) error
-	CreateViews([]View) error
+	CreateTables(context.Context, []Table) error
+	CreateIndexes(context.Context, []Index) error
+	CreateViews(context.Context, []View) error
 }
 
 type Result struct {

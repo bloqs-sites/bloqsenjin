@@ -64,7 +64,7 @@ func (s *AuthServer) SignOut(ctx context.Context, in *proto.CredentialsWithToken
 	}
 }
 
-func (s *AuthServer) LogIn(ctx context.Context, in *proto.CredentialsWantPermissions) (*proto.TokenValidation, error) {
+func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*proto.TokenValidation, error) {
 	var (
 		token       Token
 		err         error

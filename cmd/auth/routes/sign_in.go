@@ -30,15 +30,9 @@ func SignInRoute(s *grpc.Server, ch chan error, client_creator func(chan error) 
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				//} else if !strings.HasPrefix(ct, FORM_DATA) {
-				//	if err = r.ParseMultipartForm(64 << 20); err != nil {
-				//	    w.WriteHeader(http.StatusBadRequest)
-				//		return
-				//	}
 			} else {
 				w.WriteHeader(http.StatusUnsupportedMediaType)
 				w.Header().Add("Accept", X_WWW_FORM_URLENCODED)
-				//w.Header().Add("Accept", FORM_DATA)
 				return
 			}
 
@@ -104,7 +98,6 @@ func SignInRoute(s *grpc.Server, ch chan error, client_creator func(chan error) 
 			helpers.CheckOriginHeader(w, r)
 			w.Header().Add("Access-Control-Allow-Methods", http.MethodPost)
 			w.Header().Add("Access-Control-Allow-Methods", http.MethodOptions)
-			//w.Header().Add("Access-Control-Allow-Headers", "")
 			w.Header().Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
 			w.WriteHeader(http.StatusOK)
 		default:

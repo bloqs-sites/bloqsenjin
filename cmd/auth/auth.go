@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -34,9 +35,8 @@ func main() {
 
 	ch := make(chan error)
 
-	// TODO: This needs to be credentials and at the same time have support for
-	// the various db.KVDBer
-	creds := dbh.NewKeyDB(dbh.NewRedisCreds("localhost", 6379, "", 0))
+	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
+	creds := dbh.NewMySQL(os.Getenv("DSN"))
 	secrets := dbh.NewKeyDB(dbh.NewRedisCreds("localhost", 6379, "", 0))
 
 	auther := auth.NewBloqsAuther(creds)
@@ -103,7 +103,7 @@ func startHTTPServer(ch chan error) {
 			return
 		}
 
-		var v *pb.Validation
+		var v *proto.Validation
 
 		c, cc := createGRPCClient(ch)
 		defer cc()
@@ -118,7 +118,7 @@ func startHTTPServer(ch chan error) {
 			return
 		}
 
-		var t *pb.Token
+		var t *proto.Token
 
 		switch r.URL.Query().Get(query) {
 		case "basic":

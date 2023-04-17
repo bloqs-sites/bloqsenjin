@@ -36,19 +36,28 @@ func SignOutRoute(s *grpc.Server, ch chan error, client_creator func(chan error)
 				return
 			}
 
+			c, cc := client_creator(ch)
+			defer cc()
+
 			var (
-				v   *proto.Validation
-				jwt []byte
+				v      *proto.Validation
+				jwt    []byte
+				revoke bool
 			)
 
-			jwt = extractToken(w, r)
+			jwt, revoke = extractToken(w, r)
+			token := &proto.Token{
+				Jwt: jwt,
+			}
+
+			if revoke {
+				c.Revoke(r.Context(), token)
+				return
+			}
 
 			if jwt != nil {
 				return
 			}
-
-			c, cc := client_creator(ch)
-			defer cc()
 
 			switch r.URL.Query().Get(query) {
 			case "basic":
@@ -75,9 +84,7 @@ func SignOutRoute(s *grpc.Server, ch chan error, client_creator func(chan error)
 							},
 						},
 					},
-					Token: &proto.Token{
-						Jwt: jwt,
-					},
+					Token: token,
 				})
 			}
 

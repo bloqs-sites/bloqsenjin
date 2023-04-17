@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
@@ -13,8 +14,10 @@ import (
 )
 
 const (
-	basic_email_prefix = "creds:basic:email:%s"
-	jwt_prefix         = "token:jwt:%s"
+	jwt_prefix    = "token:jwt:%s"
+	table         = "credentials"
+	id_type_table = "id-type"
+	failed_table  = "failed"
 )
 
 type claims struct {
@@ -23,10 +26,36 @@ type claims struct {
 }
 
 type BloqsAuther struct {
-	creds db.KVDBer
+	creds db.DataManipulater
 }
 
-func NewBloqsAuther(creds db.KVDBer) *BloqsAuther {
+func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) *BloqsAuther {
+	creds.CreateTables(ctx, []db.Table{
+		{
+			Name: table,
+			Columns: []string{
+				"`id` INTEGER PRIMARY KEY AUTOINCREMENT",
+				"`identifier` TEXT NOT NULL",
+				"`type` INT NOT NULL",
+				"`secret` TEXT NOT NULL",
+				"`is_super` BOOLEAN NOT NULL DEFAULT 0",
+				"`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+				"`modified_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+				"`last_log_in` TIMESTAMP",
+				"UNIQUE (`identifier`, `type`)",
+			},
+		},
+		{
+			Name: "failed",
+			Columns: []string{
+				"`id` INTEGER PRIMARY KEY AUTOINCREMENT",
+				"`credential` INTEGER NOT NULL",
+				"`timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+				fmt.Sprintf("FOREIGN KEY (`credential`) REFERENCES `%s`(`id`)", table),
+			},
+		},
+	})
+	//creds.CreateViews(ctx, []db.View{})
 	return &BloqsAuther{creds}
 }
 
@@ -46,10 +75,13 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
-	entries := make(map[string][]byte, 1)
-	entries[fmt.Sprintf(basic_email_prefix, c.Basic.Email)] = hash
-
-	if err != a.creds.Put(ctx, entries, 0) {
+	if _, err := a.creds.Insert(ctx, table, []map[string]string{
+		map[string]string{
+			"identifier": c.Basic.Email,
+			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+			"secret":     string(hash),
+		},
+	}); err != nil {
 		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
@@ -80,7 +112,11 @@ func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_
 }
 
 func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) *auth.AuthError {
-	hashes, err := a.creds.Get(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail()))
+	hashes, err := a.creds.Select(ctx, table, func() map[string]any {
+        return map[string]any{
+            "secret": new(string),
+        }
+    })
 
 	if err != nil {
 		return err

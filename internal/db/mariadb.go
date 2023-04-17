@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,30 +12,30 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type MariaDB struct {
+type MySQL struct {
 	conn *sql.DB
 }
 
-func NewMariaDB(dsn string) MariaDB {
+func NewMySQL(dsn string) MySQL {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		panic(err)
+		fmt.Errorf("failed to connect: %v", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		panic(err)
+		fmt.Errorf("failed to ping: %v", err)
 	}
 
 	db.SetConnMaxLifetime(time.Minute * 3)
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(10)
 
-	return MariaDB{
+	return MySQL{
 		conn: db,
 	}
 }
 
-func (dbh MariaDB) Select(table string, columns func() map[string]any) (db.Result, error) {
+func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[string]any) (db.Result, error) {
 	r := make([]db.JSON, 0)
 
 	column := columns()
@@ -53,7 +54,7 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (db.Resul
 		i++
 	}
 
-	rows, err := dbh.conn.Query(fmt.Sprintf("SELECT %s FROM `%s`;", strings.Join(keys, ", "), table))
+	rows, err := dbh.conn.QueryContext(ctx, fmt.Sprintf("SELECT %s FROM `%s`;", strings.Join(keys, ", "), table))
 
 	if err != nil {
 		return db.Result{
@@ -106,7 +107,7 @@ func (dbh MariaDB) Select(table string, columns func() map[string]any) (db.Resul
 	}, rows.Err()
 }
 
-func (dbh MariaDB) Insert(table string, rows []map[string]string) (db.Result, error) {
+func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]string) (db.Result, error) {
 	if len(rows) < 1 {
 		return db.Result{
 			LastID: nil,
@@ -169,7 +170,7 @@ func (dbh MariaDB) Insert(table string, rows []map[string]string) (db.Result, er
 
 	stmt := fmt.Sprintf("INSERT INTO `%s` (`%s`) VALUES %s", table, strings.Join(columns, "`, `"), strings.Join(rowsstr, ", "))
 
-	res, err := dbh.conn.Exec(stmt, vals...)
+	res, err := dbh.conn.ExecContext(ctx, stmt, vals...)
 
 	if err == nil {
 		last, lasterr := res.LastInsertId()
@@ -193,7 +194,7 @@ func (dbh MariaDB) Insert(table string, rows []map[string]string) (db.Result, er
 	}, nil
 }
 
-func (dbh MariaDB) Update(table string, assignments []map[string]any, conditions []map[string]any) (db.Result, error) {
+func (dbh *MySQL) Update(ctx context.Context, table string, assignments []map[string]any, conditions []map[string]any) (db.Result, error) {
 	r := make([]db.JSON, 0)
 	return db.Result{
 		LastID: nil,
@@ -201,7 +202,7 @@ func (dbh MariaDB) Update(table string, assignments []map[string]any, conditions
 	}, nil
 }
 
-func (dbh MariaDB) Delete(table string, conditions []map[string]any) (db.Result, error) {
+func (dbh *MySQL) Delete(ctx context.Context, table string, conditions []map[string]any) (db.Result, error) {
 	r := make([]db.JSON, 0)
 	return db.Result{
 		LastID: nil,
@@ -209,9 +210,9 @@ func (dbh MariaDB) Delete(table string, conditions []map[string]any) (db.Result,
 	}, nil
 }
 
-func (dbh MariaDB) CreateTables(ts []db.Table) error {
+func (dbh *MySQL) CreateTables(ctx context.Context, ts []db.Table) error {
 	for _, t := range ts {
-		_, err := dbh.conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);",
+		_, err := dbh.conn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);",
 			t.Name, strings.Join(t.Columns, ", ")))
 
 		if err != nil {
@@ -223,13 +224,13 @@ func (dbh MariaDB) CreateTables(ts []db.Table) error {
 	return nil
 }
 
-func (dbh MariaDB) CreateIndexes(ts []db.Index) error {
+func (dbh *MySQL) CreateIndexes(context.Context, []db.Index) error {
 	return nil
 }
 
-func (dbh MariaDB) CreateViews(ts []db.View) error {
+func (dbh *MySQL) CreateViews(ctx context.Context, ts []db.View) error {
 	for _, t := range ts {
-		_, err := dbh.conn.Exec(fmt.Sprintf("CREATE OR REPLACE VIEW `%s` AS %s;",
+		_, err := dbh.conn.ExecContext(ctx, fmt.Sprintf("CREATE OR REPLACE VIEW `%s` AS %s;",
 			t.Name, t.Select))
 
 		if err != nil {

@@ -23,5 +23,7 @@
 /proto/*.go
 !protoc.sh
 
+!/api/vercel.example.json
+
 # ...even if they are in subdirectories
 !*/

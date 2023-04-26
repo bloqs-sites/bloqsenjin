@@ -144,7 +144,7 @@ func createGRPCClient() (proto.AuthClient, func(), error) {
 	}, nil
 }
 
-func a() auth.AuthServer{
+func a() auth.AuthServer {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
 	creds := db.NewMySQL(os.Getenv("DSN"))
 	secrets := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))

@@ -53,11 +53,11 @@ func (dbh *D1) Select(ctx context.Context, table string, columns func() map[stri
 	}
 
 	res, err := dbh.pull(
-        ctx,
-        http.MethodGet,
-        strings.Join(append([]string{dbh.url, "DML", table}, keys...), "/"),
-        bytes.NewBuffer(make([]byte, 0)),
-    )
+		ctx,
+		http.MethodGet,
+		strings.Join(append([]string{dbh.url, "DML", table}, keys...), "/"),
+		bytes.NewBuffer(make([]byte, 0)),
+	)
 
 	if err != nil {
 		return db.Result{
@@ -82,7 +82,7 @@ func (dbh *D1) Select(ctx context.Context, table string, columns func() map[stri
 
 func (dbh *D1) Insert(ctx context.Context, table string, rows []map[string]string) (db.Result, error) {
 	if len(rows) < 1 {
-		return db.Result{ }, errors.New("No rows to be inserted")
+		return db.Result{}, errors.New("No rows to be inserted")
 	}
 
 	set := make(map[string]bool, len(rows[0]))

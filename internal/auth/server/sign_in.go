@@ -90,8 +90,8 @@ func signInRoute(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-            a := authSrv()
-            a.SignIn(r.Context(), credentials)
+			a := authSrv(r.Context())
+			a.SignIn(r.Context(), credentials)
 		}
 
 		var status uint16
@@ -143,7 +143,7 @@ func createGRPCClient() (proto.AuthClient, func(), error) {
 	}, nil
 }
 
-func authSrv(ctx context.Context) bloqs_auth.AuthServer{
+func authSrv(ctx context.Context) bloqs_auth.AuthServer {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
 	creds := db.NewMySQL(os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
 	secrets := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))

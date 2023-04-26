@@ -63,9 +63,9 @@ func (s *AuthServer) SignOut(ctx context.Context, in *proto.Token) (*proto.Valid
 	//	return valid("Credentials were deleted with success!"), nil
 	//}
 
-    str := "TODO"
-    var code uint32 = 500
-    return invalid(str, &code), nil
+	str := "TODO"
+	var code uint32 = 500
+	return invalid(str, &code), nil
 }
 
 func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*proto.TokenValidation, error) {
@@ -107,7 +107,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 	//	},
 	//}, err
 
-    return nil, nil
+	return nil, nil
 }
 
 func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Validation, error) {

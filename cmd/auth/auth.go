@@ -79,97 +79,97 @@ func createGRPCClient(ch chan error) (proto.AuthClient, func()) {
 }
 
 func startHTTPServer(ch chan error) {
-//	sign_in_route := conf.MustGetConfOrDefault("/sign-in", "auth", "signInPath")
-//	sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signOutPath")
-//	log_in_route := conf.MustGetConfOrDefault("/log-in", "auth", "logInPath")
-//	log_out_route := conf.MustGetConfOrDefault("/log-out", "auth", "logOutPath")
-//
-//	r := mux.NewRouter()
-//	r.Route(sign_in_route, routes.SignInRoute(s, ch, createGRPCClient))
-//	r.Route(sign_out_route, routes.SignOutRoute(s, ch, createGRPCClient))
-//	r.Route(log_in_route, func(w http.ResponseWriter, r *http.Request) {
-//		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-//			s.ServeHTTP(w, r)
-//			return
-//		}
-//
-//		var err error
-//
-//		if err = r.ParseMultipartForm(64 << 20); err != nil {
-//			return
-//		}
-//
-//		var v *proto.Validation
-//
-//		c, cc := createGRPCClient(ch)
-//		defer cc()
-//
-//		permissionsStr := r.FormValue("permissions")
-//		if permissionsStr == "" {
-//			permissionsStr = strconv.Itoa(int(auth.DEFAULT_PERMISSIONS))
-//		}
-//		permissions, err := strconv.ParseUint(permissionsStr, 10, 0)
-//
-//		if err != nil {
-//			return
-//		}
-//
-//		var t *proto.Token
-//
-//		switch r.URL.Query().Get(query) {
-//		case "basic":
-//			t, err = c.LogIn(r.Context(), &pb.CredentialsWantPermissions{
-//				Credentials: &pb.Credentials{
-//					Credentials: &proto.Credentials_Basic{
-//						Basic: &pb.Credentials_BasicCredentials{
-//							Email:    r.Form["email"][0],
-//							Password: r.Form["pass"][0],
-//						},
-//					},
-//				},
-//				Permissions: permissions,
-//			})
-//		}
-//		if err != nil {
-//			w.Write([]byte(err.Error()))
-//			w.WriteHeader(500)
-//			return
-//		}
-//
-//		if t == nil {
-//			w.WriteHeader(400)
-//			return
-//		}
-//
-//		w.Header().Add("BLOQS_JWT", string(t.Jwt))
-//		w.Header().Add("Content-Type", "application/json")
-//
-//		if err := json.NewEncoder(w).Encode(t); err != nil {
-//			w.WriteHeader(500)
-//		}
-//
-//		if err != nil {
-//			w.Write([]byte(err.Error()))
-//			w.WriteHeader(500)
-//			return
-//		}
-//
-//		if v == nil {
-//			w.WriteHeader(400)
-//			return
-//		}
-//
-//		if v.Message != nil {
-//			w.Write([]byte(*v.Message))
-//		}
-//
-//		if v.Valid {
-//			w.WriteHeader(200)
-//		} else {
-//			w.WriteHeader(400)
-//		}
-//	})
-//
+	//	sign_in_route := conf.MustGetConfOrDefault("/sign-in", "auth", "signInPath")
+	//	sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signOutPath")
+	//	log_in_route := conf.MustGetConfOrDefault("/log-in", "auth", "logInPath")
+	//	log_out_route := conf.MustGetConfOrDefault("/log-out", "auth", "logOutPath")
+	//
+	//	r := mux.NewRouter()
+	//	r.Route(sign_in_route, routes.SignInRoute(s, ch, createGRPCClient))
+	//	r.Route(sign_out_route, routes.SignOutRoute(s, ch, createGRPCClient))
+	//	r.Route(log_in_route, func(w http.ResponseWriter, r *http.Request) {
+	//		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+	//			s.ServeHTTP(w, r)
+	//			return
+	//		}
+	//
+	//		var err error
+	//
+	//		if err = r.ParseMultipartForm(64 << 20); err != nil {
+	//			return
+	//		}
+	//
+	//		var v *proto.Validation
+	//
+	//		c, cc := createGRPCClient(ch)
+	//		defer cc()
+	//
+	//		permissionsStr := r.FormValue("permissions")
+	//		if permissionsStr == "" {
+	//			permissionsStr = strconv.Itoa(int(auth.DEFAULT_PERMISSIONS))
+	//		}
+	//		permissions, err := strconv.ParseUint(permissionsStr, 10, 0)
+	//
+	//		if err != nil {
+	//			return
+	//		}
+	//
+	//		var t *proto.Token
+	//
+	//		switch r.URL.Query().Get(query) {
+	//		case "basic":
+	//			t, err = c.LogIn(r.Context(), &pb.CredentialsWantPermissions{
+	//				Credentials: &pb.Credentials{
+	//					Credentials: &proto.Credentials_Basic{
+	//						Basic: &pb.Credentials_BasicCredentials{
+	//							Email:    r.Form["email"][0],
+	//							Password: r.Form["pass"][0],
+	//						},
+	//					},
+	//				},
+	//				Permissions: permissions,
+	//			})
+	//		}
+	//		if err != nil {
+	//			w.Write([]byte(err.Error()))
+	//			w.WriteHeader(500)
+	//			return
+	//		}
+	//
+	//		if t == nil {
+	//			w.WriteHeader(400)
+	//			return
+	//		}
+	//
+	//		w.Header().Add("BLOQS_JWT", string(t.Jwt))
+	//		w.Header().Add("Content-Type", "application/json")
+	//
+	//		if err := json.NewEncoder(w).Encode(t); err != nil {
+	//			w.WriteHeader(500)
+	//		}
+	//
+	//		if err != nil {
+	//			w.Write([]byte(err.Error()))
+	//			w.WriteHeader(500)
+	//			return
+	//		}
+	//
+	//		if v == nil {
+	//			w.WriteHeader(400)
+	//			return
+	//		}
+	//
+	//		if v.Message != nil {
+	//			w.Write([]byte(*v.Message))
+	//		}
+	//
+	//		if v.Valid {
+	//			w.WriteHeader(200)
+	//		} else {
+	//			w.WriteHeader(400)
+	//		}
+	//	})
+	//
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
 	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), server.Server())

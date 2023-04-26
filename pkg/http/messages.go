@@ -48,7 +48,7 @@ func extractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bo
 		goto revocation
 	}
 
-	if i := cookie.MaxAge; i <= 0 || i > token_exp {
+	if i := cookie.MaxAge; i <= 0 || i > Token_exp {
 		goto revocation
 	}
 

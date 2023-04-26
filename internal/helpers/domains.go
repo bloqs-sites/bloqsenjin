@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 )

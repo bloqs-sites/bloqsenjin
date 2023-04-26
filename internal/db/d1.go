@@ -52,7 +52,12 @@ func (dbh *D1) Select(ctx context.Context, table string, columns func() map[stri
 		i++
 	}
 
-	res, err := dbh.pull(ctx, http.MethodGet, strings.Join(append([]string{dbh.url, "DML", table}, keys...), "/"))
+	res, err := dbh.pull(
+        ctx,
+        http.MethodGet,
+        strings.Join(append([]string{dbh.url, "DML", table}, keys...), "/"),
+        bytes.NewBuffer(make([]byte, 0)),
+    )
 
 	if err != nil {
 		return db.Result{

@@ -93,8 +93,13 @@ func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Bas
 		return err
 	}
 
-	if err := a.creds.Delete(ctx, fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())); err != nil {
-		return err
+	if _, err := a.creds.Delete(ctx, table, []map[string]any{
+		map[string]any{
+			"identifier": c.Basic.Email,
+			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+		},
+	}); err != nil {
+		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
 	return nil
@@ -105,27 +110,49 @@ func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_
 		return "", err
 	}
 
-	return t.GenToken(ctx, &auth.Payload{
+	tk, err := t.GenToken(ctx, &auth.Payload{
 		Client:      c.Basic.Email,
 		Permissions: p,
 	})
+
+	if err != nil {
+		return tk, auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+	}
+
+	return tk, nil
 }
 
 func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) *auth.AuthError {
 	hashes, err := a.creds.Select(ctx, table, func() map[string]any {
-        return map[string]any{
-            "secret": new(string),
-        }
-    })
+		return map[string]any{
+			"secret": new(string),
+		}
+	})
 
 	if err != nil {
-		return err
+		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
-	hash := hashes[fmt.Sprintf(basic_email_prefix, c.Basic.GetEmail())]
+	var hash []byte
+	for _, i := range hashes.Rows {
+		if v, ok := i["identifier"]; !ok || v != c.Basic.Email {
+			continue
+		}
+		if v, ok := i["type"]; !ok || v != strconv.Itoa(int(auth.BASIC_EMAIL)) {
+			continue
+		}
+
+		h, ok := i["type"]
+		if !ok {
+			continue
+		}
+
+		hash = h.([]byte)
+		break
+	}
 
 	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
-		return err
+		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
 	return nil

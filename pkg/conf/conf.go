@@ -3,7 +3,6 @@ package conf
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"io"
 	"net/url"
 	"os"
@@ -13,50 +12,41 @@ import (
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
 )
 
+type config map[string]any
+
 var (
-	conf_path = flag.String(conf_flag, conf_default_path, conf_usage)
-	compiler  = jsonschema.NewCompiler()
-	sch       *jsonschema.Schema
+	c        = jsonschema.NewCompiler()
+	sch      *jsonschema.Schema
 
-	conf map[string]any
-)
-
-const (
-	conf_flag         = "bloqs-conf"
-	conf_default_path = "./.bloqs.conf.json"
-	conf_usage        = ""
-
-	schema_path = "https://black-silence-a2dc.torres-dev.workers.dev/"
+	cnf config
 )
 
 func init() {
-	flag.Parse()
+	c.Draft = jsonschema.Draft2020
+}
 
-	compiler.Draft = jsonschema.Draft2020
-
+func Compile(sch_path, cnf_path string) error {
 	var err error
-	if sch, err = compiler.Compile(schema_path); err != nil {
-		panic(err)
+	if sch, err = c.Compile(sch_path); err != nil {
+		return err
 	}
 
-	if conf, err = readConf(*conf_path); err != nil {
-		panic(err)
+	if cnf, err = readConf(cnf_path); err != nil {
+		return err
 	}
 
-	if err = sch.Validate(conf); err != nil {
-		panic(err)
-	}
+	return sch.Validate(cnf)
 }
 
 func GetConf(keys ...string) (any, error) {
-	c := conf
+	c := cnf
 	for _, i := range keys {
 		v, ok := c[i]
 		if !ok {
 			return nil, errors.New("nil")
 		}
 
-		if m, ok := v.(map[string]any); ok {
+		if m, ok := v.(config); ok {
 			c = m
 		} else {
 			return v, nil
@@ -82,7 +72,7 @@ func MustGetConfOrDefault[T any](default_value T, keys ...string) T {
 	return default_value
 }
 
-func readConf(path string) (map[string]any, error) {
+func readConf(path string) (config, error) {
 	var r io.ReadCloser
 
 	if _, err := url.ParseRequestURI(path); err != nil {
@@ -109,7 +99,7 @@ func readConf(path string) (map[string]any, error) {
 
 	defer r.Close()
 
-	var buf map[string]any
+	var buf config
 	if err := json.NewDecoder(r).Decode(&buf); err != nil {
 		return buf, err
 	}

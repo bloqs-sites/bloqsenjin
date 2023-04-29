@@ -1,12 +1,9 @@
-package server
+package http
 
 import (
 	"context"
 	"encoding/json"
-	"flag"
-	"fmt"
-	"io/ioutil"
-	"net"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -17,22 +14,24 @@ import (
 	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	p "google.golang.org/protobuf/proto"
 )
 
-var (
-	gRPCPort = flag.Int("gRPCPort", 50051, "The gRPC server port")
-)
+//var (
+//	gRPCPort = flag.Int("gRPCPort", 50051, "The gRPC server port")
+//)
 
-func signInRoute(w http.ResponseWriter, r *http.Request) {
+func signRoute(w http.ResponseWriter, r *http.Request) {
+	var (
+		err    error
+		v      *proto.Validation
+		status uint16
+	)
+
+	err = helpers.CheckOriginHeader(w, r)
+
 	switch r.Method {
 	case http.MethodPost:
-		var err error
-
-		err = helpers.CheckOriginHeader(w, r)
-
 		if err != nil {
 			return
 		}
@@ -46,7 +45,7 @@ func signInRoute(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
-			if buf, err := ioutil.ReadAll(r.Body); err != nil {
+			if buf, err := io.ReadAll(r.Body); err != nil {
 				return
 			} else {
 				if err := p.Unmarshal(buf, credentials); err != nil {
@@ -60,8 +59,6 @@ func signInRoute(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Accept", bloqs_http.GRPC)
 			return
 		}
-
-		var v *proto.Validation
 
 		switch r.URL.Query().Get(bloqs_http.Query) {
 		case "basic":
@@ -91,57 +88,88 @@ func signInRoute(w http.ResponseWriter, r *http.Request) {
 			}
 
 			a := authSrv(r.Context())
-			a.SignIn(r.Context(), credentials)
+            v, err = a.SignIn(r.Context(), credentials)
+		}
+	case http.MethodDelete:
+		if err != nil {
+			return
 		}
 
-		var status uint16
+		var token *proto.Token
 
-		if v != nil {
-			if code := v.HttpStatusCode; code != nil {
-				status = uint16(*code)
-				v.HttpStatusCode = nil
-			} else {
-				if err != nil {
-					status = http.StatusInternalServerError
-				} else {
-					if v.Valid {
-						status = http.StatusOK
-					} else {
-						status = http.StatusInternalServerError
-					}
-				}
-			}
+		a := authSrv(r.Context())
 
-			if status != http.StatusNoContent {
-				json.NewEncoder(w).Encode(v)
-				w.Header().Set("Content-Type", "application/json")
-			}
+		jwt, revoke := bloqs_http.ExtractToken(w, r)
+		token = &proto.Token{
+			Jwt: jwt,
+		}
 
-			w.WriteHeader(int(status))
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
+		if revoke {
+			v, err = a.Revoke(r.Context(), token)
+            println(v, err)
+			return
+		}
+
+		if jwt != nil {
+			return
+		}
+
+		switch r.URL.Query().Get(bloqs_http.Query) {
+		case "basic":
+            v, err = a.SignOut(r.Context(), token)
 		}
 	case http.MethodOptions:
-		helpers.CheckOriginHeader(w, r)
 		w.Header().Add("Access-Control-Allow-Methods", http.MethodPost)
+		w.Header().Add("Access-Control-Allow-Methods", http.MethodDelete)
 		w.Header().Add("Access-Control-Allow-Methods", http.MethodOptions)
+		w.Header().Add("Access-Control-Allow-Credentials", "true")
+		//w.Header().Add("Access-Control-Allow-Headers", "")
+		//w.Header().Add("Access-Control-Expose-Headers", "")
 		//w.Header().Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
 		w.Header().Set("Access-Control-Max-Age", "0")
 		w.WriteHeader(http.StatusOK)
+        return
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
+        return
+	}
+
+	if v != nil {
+		if code := v.HttpStatusCode; code != nil {
+			status = uint16(*code)
+			v.HttpStatusCode = nil
+		} else {
+			if err != nil {
+				status = http.StatusInternalServerError
+			} else {
+				if v.Valid {
+					status = http.StatusOK
+				} else {
+					status = http.StatusInternalServerError
+				}
+			}
+		}
+
+		if status != http.StatusNoContent {
+			json.NewEncoder(w).Encode(v)
+			w.Header().Set("Content-Type", "application/json")
+		}
+
+		w.WriteHeader(int(status))
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
-func createGRPCClient() (proto.AuthClient, func(), error) {
-	conn, err := grpc.Dial(net.JoinHostPort("localhost", fmt.Sprint(*gRPCPort)), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
-	}
-	return proto.NewAuthClient(conn), func() {
-		conn.Close()
-	}, nil
-}
+//func createGRPCClient() (proto.AuthClient, func(), error) {
+//	conn, err := grpc.Dial(net.JoinHostPort("localhost", fmt.Sprint(*gRPCPort)), grpc.WithTransportCredentials(insecure.NewCredentials()))
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//	return proto.NewAuthClient(conn), func() {
+//		conn.Close()
+//	}, nil
+//}
 
 func authSrv(ctx context.Context) bloqs_auth.AuthServer {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?

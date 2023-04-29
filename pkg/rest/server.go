@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,11 +28,11 @@ func NewServer(port string, crud db.DataManipulater, auth pb.AuthClient) Server 
 	}
 }
 
-func (s Server) AttachHandler(route string, h Handler) {
+func (s Server) AttachHandler(ctx context.Context, route string, h Handler) {
 	db := *s.dbh
-	db.CreateTables(h.CreateTable())
-	db.CreateIndexes(h.CreateIndexes())
-	db.CreateViews(h.CreateViews())
+	db.CreateTables(ctx, h.CreateTable())
+	db.CreateIndexes(ctx, h.CreateIndexes())
+	db.CreateViews(ctx, h.CreateViews())
 
 	s.mux.Route(route, func(w http.ResponseWriter, r *http.Request) {
 		models, err := h.Handle(r, s)

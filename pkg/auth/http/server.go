@@ -1,7 +1,6 @@
-package server
+package http
 
 import (
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,54 +11,18 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-var (
-	cnf_path *string
-	sch_path *string
-)
-
-const (
-	cnf_flag         = "bloqs-conf"
-	cnf_default_path = "./.bloqs.conf.json"
-	cnf_usage        = ""
-	cnf_env_var      = "BLOQS_CONF"
-
-	sch_flag         = "bloqs-schema"
-	sch_default_path = "https://bloqs.torres-dev.workers.dev/sch"
-	sch_usage        = ""
-	sch_env_var      = "BLOQS_SCHEMA"
-)
-
-func init() {
-	path, exists := os.LookupEnv(cnf_env_var)
-	if !exists {
-		flag.StringVar(cnf_path, cnf_flag, cnf_default_path, cnf_usage)
-	} else {
-		flag.StringVar(cnf_path, cnf_flag, path, cnf_usage)
-    }
-
-	path, exists = os.LookupEnv(sch_env_var)
-	if !exists {
-		flag.StringVar(sch_path, sch_flag, sch_default_path, sch_usage)
-	} else {
-		flag.StringVar(sch_path, sch_flag, path, sch_usage)
-    }
-}
-
 func Server() http.HandlerFunc {
-	sign_in_route := conf.MustGetConfOrDefault("/sign-in", "auth", "signInPath")
-	//sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signOutPath")
-	//log_in_route := conf.MustGetConfOrDefault("/log-in", "auth", "logInPath")
-	//log_out_route := conf.MustGetConfOrDefault("/log-out", "auth", "logOutPath")
+	sign_route := conf.MustGetConfOrDefault("/sign", "auth", "signPath")
+	//log_route := conf.MustGetConfOrDefault("/log", "auth", "logPath")
 
 	r := mux.NewRouter()
-	r.Route(sign_in_route, signInRoute)
-	//r.Route(sign_out_route, routes.SignOutRoute(s, ch, createGRPCClient))
+	r.Route(sign_route, signRoute)
 
 	return r.ServeHTTP
 }
 
 func Serve(w http.ResponseWriter, r *http.Request) {
-	if err := conf.Compile(*sch_path, *cnf_path); err != nil {
+	if err := conf.Compile(); err != nil {
 		var err_msg strings.Builder
 		switch err := err.(type) {
 		case *jsonschema.SchemaError:

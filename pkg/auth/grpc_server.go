@@ -32,9 +32,9 @@ func (s *AuthServer) SignIn(ctx context.Context, in *proto.Credentials) (*proto.
 			return errorToValidation(err, &status), err
 		}
 	case nil:
-		return invalid("Did not recieve Credentials.", nil), errors.New("Credentials cannot be nil")
+		return invalid("Did not recieve Credentials.", nil), errors.New("credentials cannot be nil")
 	default:
-		return invalid("Recieved forbidden on unsupported Credentials.", nil), fmt.Errorf("Credentials has unexpected type %T", x)
+		return invalid("Recieved forbidden on unsupported Credentials.", nil), fmt.Errorf("credentials has unexpected type %T", x)
 	}
 
 	status = http.StatusNoContent

@@ -8,19 +8,20 @@ import (
 	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
+	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 )
 
 type PreferenceHandler struct {
 }
 
-func (p PreferenceHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+func (p PreferenceHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	if err := r.ParseMultipartForm(1024); err != nil {
 		return nil, err
 	}
 
 	dbh := *s.GetDB()
 
-	dbh.Insert("preference", []map[string]string{
+	dbh.Insert(r.Context(), "preference", []map[string]string{
 		{
 			"name":        r.FormValue("name"),
 			"description": r.FormValue("description"),
@@ -30,7 +31,7 @@ func (p PreferenceHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, 
 	return nil, nil
 }
 
-func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	dbh := *s.GetDB()
 
 	parts := strings.Split(r.URL.Path, "/")
@@ -42,7 +43,7 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 			return nil, err
 		}
 
-		res, err := dbh.Select("preference", p.MapGenerator())
+		res, err := dbh.Select(r.Context(), "preference", p.MapGenerator())
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +55,7 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 			return rows, nil
 		}
 
-		json := make([]rest.JSON, 1)
+		json := make([]db.JSON, 1)
 
 		for _, v := range rows {
 			i, ok := v["id"]
@@ -76,7 +77,7 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 		return json, nil
 	}
 
-	res, err := dbh.Select("preference", p.MapGenerator())
+	res, err := dbh.Select(r.Context(), "preference", p.MapGenerator())
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +89,9 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 		return rows, nil
 	}
 
-	json, i := make([]rest.JSON, len(rows)+1), 0
+	json, i := make([]db.JSON, len(rows)+1), 0
 
-	json[i] = rest.JSON{
+	json[i] = db.JSON{
 		"@context": "https://schema.org/",
 	}
 
@@ -104,15 +105,15 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, er
 	return json, nil
 }
 
-func (p PreferenceHandler) Update(*http.Request, rest.Server) ([]rest.JSON, error) {
+func (p PreferenceHandler) Update(*http.Request, rest.Server) ([]db.JSON, error) {
 	return nil, nil
 }
 
-func (p PreferenceHandler) Delete(*http.Request, rest.Server) ([]rest.JSON, error) {
+func (p PreferenceHandler) Delete(*http.Request, rest.Server) ([]db.JSON, error) {
 	return nil, nil
 }
 
-func (p PreferenceHandler) Handle(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+func (p PreferenceHandler) Handle(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	switch r.Method {
 	case "":
 		fallthrough
@@ -125,8 +126,8 @@ func (p PreferenceHandler) Handle(r *http.Request, s rest.Server) ([]rest.JSON, 
 	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))
 }
 
-func (p PreferenceHandler) CreateTable() []rest.Table {
-	return []rest.Table{
+func (p PreferenceHandler) CreateTable() []db.Table {
+	return []db.Table{
 		{
 			Name: "preference",
 			Columns: []string{
@@ -140,12 +141,12 @@ func (p PreferenceHandler) CreateTable() []rest.Table {
 	}
 }
 
-func (h *PreferenceHandler) CreateIndexes() []rest.Index {
-	return []rest.Index{}
+func (h *PreferenceHandler) CreateIndexes() []db.Index {
+	return []db.Index{}
 }
 
-func (h *PreferenceHandler) CreateViews() []rest.View {
-	return []rest.View{}
+func (h *PreferenceHandler) CreateViews() []db.View {
+	return []db.View{}
 }
 
 func (p PreferenceHandler) MapGenerator() func() map[string]any {

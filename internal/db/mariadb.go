@@ -19,11 +19,11 @@ type MySQL struct {
 func NewMySQL(dsn string) MySQL {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		fmt.Errorf("failed to connect: %v", err)
+		//fmt.Errorf("failed to connect: %v", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		fmt.Errorf("failed to ping: %v", err)
+		//fmt.Errorf("failed to ping: %v", err)
 	}
 
 	db.SetConnMaxLifetime(time.Minute * 3)

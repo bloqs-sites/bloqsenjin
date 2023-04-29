@@ -15,8 +15,8 @@ import (
 type config map[string]any
 
 var (
-	c        = jsonschema.NewCompiler()
-	sch      *jsonschema.Schema
+	c   = jsonschema.NewCompiler()
+	sch *jsonschema.Schema
 
 	cnf config
 )
@@ -25,13 +25,13 @@ func init() {
 	c.Draft = jsonschema.Draft2020
 }
 
-func Compile(sch_path, cnf_path string) error {
+func Compile() error {
 	var err error
-	if sch, err = c.Compile(sch_path); err != nil {
+	if sch, err = c.Compile(*sch_path); err != nil {
 		return err
 	}
 
-	if cnf, err = readConf(cnf_path); err != nil {
+	if cnf, err = readConf(*cnf_path); err != nil {
 		return err
 	}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"google.golang.org/grpc"
 )
@@ -25,14 +26,14 @@ func SignInRoute(s *grpc.Server, ch chan error, client_creator func(chan error) 
 			}
 
 			ct := r.Header.Get("Content-Type")
-			if strings.HasPrefix(ct, X_WWW_FORM_URLENCODED) {
+			if strings.HasPrefix(ct, mux.X_WWW_FORM_URLENCODED) {
 				if err = r.ParseForm(); err != nil {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
 			} else {
 				w.WriteHeader(http.StatusUnsupportedMediaType)
-				w.Header().Add("Accept", X_WWW_FORM_URLENCODED)
+				w.Header().Add("Accept", mux.X_WWW_FORM_URLENCODED)
 				return
 			}
 
@@ -41,7 +42,7 @@ func SignInRoute(s *grpc.Server, ch chan error, client_creator func(chan error) 
 			c, cc := client_creator(ch)
 			defer cc()
 
-			switch r.URL.Query().Get(query) {
+			switch r.URL.Query().Get(mux.Query) {
 			case "basic":
 				email := r.FormValue("email")
 

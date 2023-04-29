@@ -10,7 +10,7 @@ import (
 	"os"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
-	"github.com/bloqs-sites/bloqsenjin/internal/auth/server"
+	auth_http "github.com/bloqs-sites/bloqsenjin/pkg/auth/http"
 	dbh "github.com/bloqs-sites/bloqsenjin/internal/db"
 	auth_server "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/proto"
@@ -79,14 +79,6 @@ func createGRPCClient(ch chan error) (proto.AuthClient, func()) {
 }
 
 func startHTTPServer(ch chan error) {
-	//	sign_in_route := conf.MustGetConfOrDefault("/sign-in", "auth", "signInPath")
-	//	sign_out_route := conf.MustGetConfOrDefault("/sign-out", "auth", "signOutPath")
-	//	log_in_route := conf.MustGetConfOrDefault("/log-in", "auth", "logInPath")
-	//	log_out_route := conf.MustGetConfOrDefault("/log-out", "auth", "logOutPath")
-	//
-	//	r := mux.NewRouter()
-	//	r.Route(sign_in_route, routes.SignInRoute(s, ch, createGRPCClient))
-	//	r.Route(sign_out_route, routes.SignOutRoute(s, ch, createGRPCClient))
 	//	r.Route(log_in_route, func(w http.ResponseWriter, r *http.Request) {
 	//		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 	//			s.ServeHTTP(w, r)
@@ -172,5 +164,5 @@ func startHTTPServer(ch chan error) {
 	//
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
-	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), server.Server())
+	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), auth_http.Server())
 }

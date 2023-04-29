@@ -73,7 +73,7 @@ func (dbh *D1) Select(ctx context.Context, table string, columns func() map[stri
 		}, errors.New("Unexpected response from the database")
 	}
 
-	json.NewDecoder(res.Body).Decode(r)
+	json.NewDecoder(res.Body).Decode(&r)
 
 	return db.Result{
 		Rows: r,

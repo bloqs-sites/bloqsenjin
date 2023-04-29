@@ -36,7 +36,7 @@ func main() {
 	defer conn.Close()
 	c := pb.NewAuthClient(conn)
 
-	dbh := db.NewMariaDB("owduser:passwd@/owd")
+	dbh := db.NewMySQL("owduser:passwd@/owd")
 
 	s := rest.NewServer(":8089", &dbh, c)
 

@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	PLAIN                 = "text/plain"
 	X_WWW_FORM_URLENCODED = "application/x-www-form-urlencoded"
 	FORM_DATA             = "multipart/form-data"
 	GRPC                  = "application/grpc"
@@ -23,14 +24,14 @@ var (
 	Token_exp = conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
 )
 
-func extractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bool) {
+func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bool) {
 	revoke = false
 
 	cookie, err := r.Cookie(JWT_COOKIE)
 	if err == http.ErrNoCookie {
 		header := r.Header.Get("Authorization")
 
-		if header == "" || !strings.HasPrefix(header, BEARER_PREFIX) {
+		if !strings.HasPrefix(header, BEARER_PREFIX) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}

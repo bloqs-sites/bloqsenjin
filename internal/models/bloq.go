@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,13 +10,14 @@ import (
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
 
 type BloqHandler struct {
 }
 
-func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
 		return nil, fmt.Errorf("No permissions")
 	}
@@ -60,7 +62,7 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error
 
 	dbh := *s.GetDB()
 
-	res, err := dbh.Insert("bloq", []map[string]string{bloqrow})
+	res, err := dbh.Insert(r.Context(), "bloq", []map[string]string{bloqrow})
 
 	if err != nil || res.LastID == nil {
 		return nil, fmt.Errorf("Internal error")
@@ -86,7 +88,7 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error
 
 	bloqirow["changeTimestamp"] = strconv.FormatInt(time.Now().Unix(), 10)
 
-	dbh.Insert("bloq_image", []map[string]string{bloqirow})
+	dbh.Insert(r.Context(), "bloq_image", []map[string]string{bloqirow})
 
 	bloqkrow := make(map[string]string)
 
@@ -94,7 +96,7 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error
 
 	for _, k := range r.MultipartForm.Value["keyword"] {
 		bloqkrow["keyword"] = k
-		dbh.Insert("bloq_keyword", []map[string]string{bloqkrow})
+		dbh.Insert(r.Context(), "bloq_keyword", []map[string]string{bloqkrow})
 	}
 
 	/* Saves image somewhere like Cloudflare R2, IPFS, idk */
@@ -102,7 +104,7 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]rest.JSON, error
 	return res.Rows, nil
 }
 
-func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	dbh := *s.GetDB()
 
 	parts := strings.Split(r.URL.Path, "/")
@@ -114,7 +116,7 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) 
 			return nil, err
 		}
 
-		res, err := dbh.Select("bloq_basic", h.MapGenerator())
+		res, err := dbh.Select(r.Context(), "bloq_basic", h.MapGenerator())
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +128,7 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) 
 			return rows, nil
 		}
 
-		json := make([]rest.JSON, 1)
+		json := make([]db.JSON, 1)
 
 		for _, v := range rows {
 			i, ok := v["id"]
@@ -148,7 +150,7 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) 
 		return json, nil
 	}
 
-	res, err := dbh.Select("bloq_basic", h.MapGenerator())
+	res, err := dbh.Select(context.Background(), "bloq_basic", h.MapGenerator())
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +162,9 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) 
 		return rows, nil
 	}
 
-	json, i := make([]rest.JSON, len(rows)+1), 0
+	json, i := make([]db.JSON, len(rows)+1), 0
 
-	json[i] = rest.JSON{
+	json[i] = db.JSON{
 		"@context": "https://schema.org/",
 	}
 
@@ -176,15 +178,15 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]rest.JSON, error) 
 	return json, nil
 }
 
-func (h *BloqHandler) Update(*http.Request, rest.Server) ([]rest.JSON, error) {
+func (h *BloqHandler) Update(*http.Request, rest.Server) ([]db.JSON, error) {
 	return nil, nil
 }
 
-func (h *BloqHandler) Delete(*http.Request, rest.Server) ([]rest.JSON, error) {
+func (h *BloqHandler) Delete(*http.Request, rest.Server) ([]db.JSON, error) {
 	return nil, nil
 }
 
-func (h *BloqHandler) Handle(r *http.Request, s rest.Server) ([]rest.JSON, error) {
+func (h *BloqHandler) Handle(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	switch r.Method {
 	case "":
 		fallthrough
@@ -197,8 +199,8 @@ func (h *BloqHandler) Handle(r *http.Request, s rest.Server) ([]rest.JSON, error
 	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))
 }
 
-func (h *BloqHandler) CreateTable() []rest.Table {
-	return []rest.Table{
+func (h *BloqHandler) CreateTable() []db.Table {
+	return []db.Table{
 		{
 			Name: "bloq",
 			Columns: []string{
@@ -241,12 +243,12 @@ func (h *BloqHandler) CreateTable() []rest.Table {
 	}
 }
 
-func (h *BloqHandler) CreateIndexes() []rest.Index {
-	return []rest.Index{}
+func (h *BloqHandler) CreateIndexes() []db.Index {
+	return []db.Index{}
 }
 
-func (h *BloqHandler) CreateViews() []rest.View {
-	return []rest.View{
+func (h *BloqHandler) CreateViews() []db.View {
+	return []db.View{
 		{
 			Name:   "bloq_basic",
 			Select: "SELECT `bloq`.*, `bloq_image`.`image` FROM `bloq` INNER JOIN `bloq_image` ON `bloq`.`id` = `bloq_image`.`bloq`;",

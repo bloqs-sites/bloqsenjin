@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	cnf_path *string
-	sch_path *string
+	cnf_path = flag.String(cnf_flag, cnf_default_path, cnf_usage)
+	sch_path = flag.String(sch_flag, sch_default_path, sch_usage)
 )
 
 const (
@@ -24,16 +24,12 @@ const (
 
 func init() {
 	path, exists := os.LookupEnv(cnf_env_var)
-	if !exists {
-		flag.StringVar(cnf_path, cnf_flag, cnf_default_path, cnf_usage)
-	} else {
-		flag.StringVar(cnf_path, cnf_flag, path, cnf_usage)
+	if exists {
+		cnf_path = &path
 	}
 
 	path, exists = os.LookupEnv(sch_env_var)
-	if !exists {
-		flag.StringVar(sch_path, sch_flag, sch_default_path, sch_usage)
-	} else {
-		flag.StringVar(sch_path, sch_flag, path, sch_usage)
+	if exists {
+		sch_path = &path
 	}
 }

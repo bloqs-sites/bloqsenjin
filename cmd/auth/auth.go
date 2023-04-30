@@ -71,7 +71,7 @@ func startGRPCServer(ch chan error, a auth_server.Auther, t auth_server.Tokener)
 
 	as := auth_server.NewAuthServer(a, t)
 
-	proto.RegisterAuthServer(s, &as)
+	proto.RegisterAuthServer(s, as)
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		ch <- err

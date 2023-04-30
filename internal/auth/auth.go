@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -34,8 +33,8 @@ func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) *BloqsAuther 
 		{
 			Name: table,
 			Columns: []string{
-				"`id` INTEGER PRIMARY KEY AUTOINCREMENT",
-				"`identifier` TEXT NOT NULL",
+				"`id` INTEGER PRIMARY KEY AUTO_INCREMENT",
+				"`identifier` VARCHAR(320) NOT NULL",
 				"`type` INT NOT NULL",
 				"`secret` TEXT NOT NULL",
 				"`is_super` BOOLEAN NOT NULL DEFAULT 0",
@@ -48,10 +47,10 @@ func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) *BloqsAuther 
 		{
 			Name: "failed",
 			Columns: []string{
-				"`id` INTEGER PRIMARY KEY AUTOINCREMENT",
+				"`id` INTEGER PRIMARY KEY AUTO_INCREMENT",
 				"`credential` INTEGER NOT NULL",
 				"`timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
-				fmt.Sprintf("FOREIGN KEY (`credential`) REFERENCES `%s`(`id`)", table),
+				//fmt.Sprintf("FOREIGN KEY (`credential`) REFERENCES `%s`(`id`)", table),
 			},
 		},
 	})

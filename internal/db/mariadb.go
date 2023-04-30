@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	_ "github.com/go-sql-driver/mysql"
@@ -16,23 +15,24 @@ type MySQL struct {
 	conn *sql.DB
 }
 
-func NewMySQL(dsn string) MySQL {
+func NewMySQL(ctx context.Context, dsn string) (*MySQL, error) {
 	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		//fmt.Errorf("failed to connect: %v", err)
-	}
-
-	if err := db.Ping(); err != nil {
-		//fmt.Errorf("failed to ping: %v", err)
-	}
-
-	db.SetConnMaxLifetime(time.Minute * 3)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
-
-	return MySQL{
+    dbh := &MySQL{
 		conn: db,
 	}
+	if err != nil {
+        return dbh, err
+	}
+
+	if err := db.PingContext(ctx); err != nil {
+        return dbh, fmt.Errorf("the DSN specified might be invalid. Could not connect to the DB:\t%s", err)
+	}
+
+	//db.SetConnMaxLifetime(time.Minute * 3)
+	//db.SetMaxOpenConns(10)
+	//db.SetMaxIdleConns(10)
+
+	return dbh, nil
 }
 
 func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[string]any) (db.Result, error) {

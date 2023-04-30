@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
 )
 
 const (
@@ -66,7 +67,7 @@ func ValidateDomain(domain string) error {
 	case DOMAINS_BLACKLIST:
 		for _, d := range v {
 			if d == domain {
-				return fmt.Errorf("The domain `%s` is a blacklisted domain", domain)
+				return fmt.Errorf("the domain `%s` is a blacklisted domain", domain)
 			}
 		}
 	case DOMAINS_WHITELIST:
@@ -75,25 +76,26 @@ func ValidateDomain(domain string) error {
 				return nil;
 			}
 		}
-		return fmt.Errorf("The domain `%s` is a non whitelisted domain", domain)
+		return fmt.Errorf("the domain `%s` is a non whitelisted domain", domain)
 	}
 
 	return nil
 }
 
 func CheckOriginHeader(h *http.Header, r *http.Request) (uint32, error) {
-	uri, err := url.ParseRequestURI(r.Header.Get("Origin"))
+    o := r.Header.Get("Origin")
+	uri, err := url.ParseRequestURI(o)
 
 	if err != nil {
-		return http.StatusForbidden, err
+        return http.StatusForbidden, fmt.Errorf("the `Origin` HTTP header has unparsable value `%s`:\t%s.\n", o, err)
 	}
 
 	if err := ValidateDomain(uri.Hostname()); err != nil {
-		return http.StatusForbidden, err
+		return http.StatusForbidden, fmt.Errorf("the `Origin` HTTP header its forbidden:\t%s.\n", err)
 	} else {
 		if GetDomainsType() == DOMAINS_WHITELIST {
 			h.Set("Access-Control-Allow-Origin", uri.String())
-			h.Add("Vary", "Origin")
+			bloqs_http.Append(h, "Vary", "Origin")
 		} else {
 			h.Set("Access-Control-Allow-Origin", "*")
 		}

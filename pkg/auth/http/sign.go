@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -15,6 +16,8 @@ import (
 	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	p "google.golang.org/protobuf/proto"
+
+    _ "github.com/joho/godotenv/autoload"
 )
 
 //var (
@@ -35,7 +38,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		if err != nil {
 			v = bloqs_auth.ErrorToValidation(err, &status)
-			break
+			goto respond
 		}
 
 		var credentials *proto.Credentials
@@ -44,42 +47,44 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
-				v = bloqs_auth.Invalid("", &status)
-				break
+				v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status)
+				goto respond
 			}
 		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
-				v = bloqs_auth.Invalid("", &status)
-				break
+				v = bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status)
+				goto respond
 			} else {
+				credentials = new(proto.Credentials)
 				if err := p.Unmarshal(buf, credentials); err != nil {
 					status = http.StatusBadRequest
-					v = bloqs_auth.Invalid("", &status)
-					break
+					v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status)
+					goto respond
 				}
 				//s.ServeHTTP(w, r)
 			}
 		} else {
 			status = http.StatusUnsupportedMediaType
-            bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
-            bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
-			v = bloqs_auth.Invalid("", &status)
-			break
+			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
+			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
+			v = bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status)
+			goto respond
 		}
 
-		if !r.URL.Query().Has(bloqs_http.GetQuery()) {
+		t := bloqs_http.GetQuery()
+		if !r.URL.Query().Has(t) {
 			status = http.StatusBadRequest
-			v = bloqs_auth.Invalid("", &status)
-			break
+			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the method to use for authentication/authorization was not defined. Define it with one of the supported values (TODO link to valid types).\n", t), &status)
+			goto respond
 		}
 
-		method := r.URL.Query().Get(bloqs_http.GetQuery())
+		method := r.URL.Query().Get(t)
 		switch method {
 		case "basic":
 			if !bloqs_auth.IsAuthMethodSupported(method) {
 				status = http.StatusUnprocessableEntity
-				v = bloqs_auth.Invalid("", &status)
+				v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` value `%s` it's unsupported. Define it with one of the supported values (TODO link to valid types).\n", t, method), &status)
 				goto respond
 			}
 
@@ -88,7 +93,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 
 				if email == "" {
 					status = http.StatusUnprocessableEntity
-					v = bloqs_auth.Invalid("", &status)
+					v = bloqs_auth.Invalid("`email` body field is empty and needs to be defined to proceed.\n", &status)
 					goto respond
 				}
 
@@ -96,7 +101,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 
 				if pass == "" {
 					status = http.StatusUnprocessableEntity
-					v = bloqs_auth.Invalid("", &status)
+					v = bloqs_auth.Invalid("`pass` body field is empty and needs to be defined to proceed.\n", &status)
 					goto respond
 				}
 
@@ -110,11 +115,18 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			a := authSrv(r.Context())
+			a, err := authSrv(r.Context())
+			if err != nil {
+				status = http.StatusInternalServerError
+				v = bloqs_auth.ErrorToValidation(err, &status)
+				goto respond
+			}
+
 			v, err = a.SignIn(r.Context(), credentials)
+			goto respond
 		default:
 			status = http.StatusBadRequest
-			v = bloqs_auth.Invalid("", &status)
+			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` has an unsupported value. Define it with one of the supported values (TODO link to valid types).\n", t), &status)
 			goto respond
 		}
 	case http.MethodDelete:
@@ -125,7 +137,12 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 
 		var token *proto.Token
 
-		a := authSrv(r.Context())
+		a, err := authSrv(r.Context())
+		if err != nil {
+			status = http.StatusInternalServerError
+			v = bloqs_auth.ErrorToValidation(err, &status)
+			goto respond
+		}
 
 		jwt, revoke := bloqs_http.ExtractToken(w, r)
 		token = &proto.Token{
@@ -155,16 +172,18 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
 		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)
 		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		h.Set("Access-Control-Allow-Credentials", "true")
 		//bloqs_http.Append(&h, "Access-Control-Allow-Headers", "")
 		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
-		//w.Header().Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
-		w.Header().Set("Access-Control-Max-Age", "0")
+		//h.Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
+		h.Set("Access-Control-Max-Age", "0")
+		var msg string
 		if err != nil {
-			w.Write([]byte(err.Error()))
+			msg = err.Error()
 		}
 		v = &proto.Validation{
 			Valid:          err == nil,
+			Message:        &msg,
 			HttpStatusCode: &status,
 		}
 		goto respond
@@ -195,7 +214,7 @@ respond:
 
 		if status != http.StatusNoContent {
 			json.NewEncoder(w).Encode(v)
-			w.Header().Set("Content-Type", "application/json")
+			h.Set("Content-Type", "application/json")
 		}
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -212,13 +231,17 @@ respond:
 //	}, nil
 //}
 
-func authSrv(ctx context.Context) bloqs_auth.AuthServer {
+func authSrv(ctx context.Context) (*bloqs_auth.AuthServer, error) {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
-	creds := db.NewMySQL(os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
+	creds, err := db.NewMySQL(ctx, os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
+	if err != nil {
+		return nil, err
+	}
+
 	secrets := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))
 
-	a := auth.NewBloqsAuther(ctx, &creds)
+	a := auth.NewBloqsAuther(ctx, creds)
 	t := auth.NewBloqsTokener(secrets)
 
-	return bloqs_auth.NewAuthServer(a, t)
+	return bloqs_auth.NewAuthServer(a, t), nil
 }

@@ -16,8 +16,8 @@ type AuthServer struct {
 	tokener Tokener
 }
 
-func NewAuthServer(a Auther, t Tokener) AuthServer {
-	return AuthServer{
+func NewAuthServer(a Auther, t Tokener) *AuthServer {
+	return &AuthServer{
 		auther:  a,
 		tokener: t,
 	}

@@ -17,15 +17,15 @@ type MySQL struct {
 
 func NewMySQL(ctx context.Context, dsn string) (*MySQL, error) {
 	db, err := sql.Open("mysql", dsn)
-    dbh := &MySQL{
+	dbh := &MySQL{
 		conn: db,
 	}
 	if err != nil {
-        return dbh, err
+		return dbh, err
 	}
 
 	if err := db.PingContext(ctx); err != nil {
-        return dbh, fmt.Errorf("the DSN specified might be invalid. Could not connect to the DB:\t%s", err)
+		return dbh, fmt.Errorf("the DSN specified might be invalid. Could not connect to the DB:\t%s", err)
 	}
 
 	//db.SetConnMaxLifetime(time.Minute * 3)

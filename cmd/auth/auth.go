@@ -33,11 +33,11 @@ var (
 func main() {
 	flag.Parse()
 	if err := conf.Compile(); err != nil {
-        switch err := err.(type) {
-        case jsonschema.InvalidJSONTypeError:
-            panic(err)
-        }
-    }
+		switch err := err.(type) {
+		case jsonschema.InvalidJSONTypeError:
+			panic(err)
+		}
+	}
 
 	ch := make(chan error)
 

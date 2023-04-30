@@ -20,11 +20,11 @@ const (
 )
 
 func GetQuery() string {
-    return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
+	return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
 }
 
 func GetToken_exp() int {
-    return conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
+	return conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
 }
 
 func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bool) {

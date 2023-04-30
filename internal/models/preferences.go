@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
+	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
 
 type PreferenceHandler struct {

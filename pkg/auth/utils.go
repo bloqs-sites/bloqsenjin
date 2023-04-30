@@ -38,11 +38,11 @@ func credentialsToID(c *proto.Credentials) *string {
 }
 
 func IsAuthMethodSupported(s string) bool {
-    for _, v := range conf.MustGetConfOrDefault([]any{}, "auth", "supported") {
-        if v.(string) == s {
-            return true
-        }
-    }
+	for _, v := range conf.MustGetConfOrDefault([]any{}, "auth", "supported") {
+		if v.(string) == s {
+			return true
+		}
+	}
 
-    return false
+	return false
 }

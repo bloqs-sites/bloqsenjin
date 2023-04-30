@@ -13,11 +13,12 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/internal/db"
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	p "google.golang.org/protobuf/proto"
 
-    _ "github.com/joho/godotenv/autoload"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 //var (
@@ -30,6 +31,8 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		v      *proto.Validation
 		status uint32
 	)
+
+	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
 
 	h := w.Header()
 	status, err = helpers.CheckOriginHeader(&h, r)
@@ -75,7 +78,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		t := bloqs_http.GetQuery()
 		if !r.URL.Query().Has(t) {
 			status = http.StatusBadRequest
-			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the method to use for authentication/authorization was not defined. Define it with one of the supported values (TODO link to valid types).\n", t), &status)
+			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the method to use for authentication/authorization was not defined. Define it with one of the supported values (.%s).\n", t, types_route), &status)
 			goto respond
 		}
 
@@ -84,7 +87,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		case "basic":
 			if !bloqs_auth.IsAuthMethodSupported(method) {
 				status = http.StatusUnprocessableEntity
-				v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` value `%s` it's unsupported. Define it with one of the supported values (TODO link to valid types).\n", t, method), &status)
+				v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` value `%s` it's unsupported. Define it with one of the supported values (.%s).\n", t, method, types_route), &status)
 				goto respond
 			}
 
@@ -126,7 +129,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 			goto respond
 		default:
 			status = http.StatusBadRequest
-			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` has an unsupported value. Define it with one of the supported values (TODO link to valid types).\n", t), &status)
+			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` has an unsupported value. Define it with one of the supported values (.%s).\n", t, types_route), &status)
 			goto respond
 		}
 	case http.MethodDelete:

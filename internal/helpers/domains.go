@@ -73,7 +73,7 @@ func ValidateDomain(domain string) error {
 	case DOMAINS_WHITELIST:
 		for _, d := range v {
 			if d == domain {
-				return nil;
+				return nil
 			}
 		}
 		return fmt.Errorf("the domain `%s` is a non whitelisted domain", domain)
@@ -83,11 +83,11 @@ func ValidateDomain(domain string) error {
 }
 
 func CheckOriginHeader(h *http.Header, r *http.Request) (uint32, error) {
-    o := r.Header.Get("Origin")
+	o := r.Header.Get("Origin")
 	uri, err := url.ParseRequestURI(o)
 
 	if err != nil {
-        return http.StatusForbidden, fmt.Errorf("the `Origin` HTTP header has unparsable value `%s`:\t%s.\n", o, err)
+		return http.StatusForbidden, fmt.Errorf("the `Origin` HTTP header has unparsable value `%s`:\t%s.\n", o, err)
 	}
 
 	if err := ValidateDomain(uri.Hostname()); err != nil {

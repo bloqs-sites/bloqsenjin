@@ -37,10 +37,10 @@ func Compile() error {
 }
 
 func GetConf(keys ...string) (any, error) {
-    if cnf == nil {
-        panic(errors.New("needs to conf.Compile"));
-        //return nil, errors.New("needs to conf.Compile");
-    }
+	if cnf == nil {
+		panic(errors.New("needs to conf.Compile"))
+		//return nil, errors.New("needs to conf.Compile");
+	}
 
 	c := cnf
 	for _, i := range keys {

@@ -12,13 +12,11 @@ import (
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
 )
 
-type config map[string]any
-
 var (
 	c   = jsonschema.NewCompiler()
 	sch *jsonschema.Schema
 
-	cnf config
+	cnf map[string]any
 )
 
 func init() {
@@ -35,10 +33,15 @@ func Compile() error {
 		return err
 	}
 
-	return sch.Validate(cnf)
+	return sch.Validate(map[string]any(cnf))
 }
 
 func GetConf(keys ...string) (any, error) {
+    if cnf == nil {
+        panic(errors.New("needs to conf.Compile"));
+        //return nil, errors.New("needs to conf.Compile");
+    }
+
 	c := cnf
 	for _, i := range keys {
 		v, ok := c[i]
@@ -46,7 +49,7 @@ func GetConf(keys ...string) (any, error) {
 			return nil, errors.New("nil")
 		}
 
-		if m, ok := v.(config); ok {
+		if m, ok := v.(map[string]any); ok {
 			c = m
 		} else {
 			return v, nil
@@ -72,7 +75,7 @@ func MustGetConfOrDefault[T any](default_value T, keys ...string) T {
 	return default_value
 }
 
-func readConf(path string) (config, error) {
+func readConf(path string) (map[string]any, error) {
 	var r io.ReadCloser
 
 	if _, err := url.ParseRequestURI(path); err != nil {
@@ -99,7 +102,7 @@ func readConf(path string) (config, error) {
 
 	defer r.Close()
 
-	var buf config
+	var buf map[string]any
 	if err := json.NewDecoder(r).Decode(&buf); err != nil {
 		return buf, err
 	}

@@ -19,10 +19,13 @@ const (
 	BEARER_PREFIX = "Bearer "
 )
 
-var (
-	Query     = conf.MustGetConfOrDefault("type", "auth", "signInTypeQueryParam")
-	Token_exp = conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
-)
+func GetQuery() string {
+    return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
+}
+
+func GetToken_exp() int {
+    return conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
+}
 
 func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bool) {
 	revoke = false
@@ -49,7 +52,7 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bo
 		goto revocation
 	}
 
-	if i := cookie.MaxAge; i <= 0 || i > Token_exp {
+	if i := cookie.MaxAge; i <= 0 || i > GetToken_exp() {
 		goto revocation
 	}
 

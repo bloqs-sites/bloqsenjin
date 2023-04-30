@@ -25,15 +25,17 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 	var (
 		err    error
 		v      *proto.Validation
-		status uint16
+		status uint32
 	)
 
-	err = helpers.CheckOriginHeader(w, r)
+	h := w.Header()
+	status, err = helpers.CheckOriginHeader(&h, r)
 
 	switch r.Method {
 	case http.MethodPost:
 		if err != nil {
-			return
+			v = bloqs_auth.ErrorToValidation(err, &status)
+			break
 		}
 
 		var credentials *proto.Credentials
@@ -41,40 +43,61 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
 			if err = r.ParseForm(); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				status = http.StatusBadRequest
+				v = bloqs_auth.Invalid("", &status)
+				break
 			}
 		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
-				return
+				status = http.StatusBadRequest
+				v = bloqs_auth.Invalid("", &status)
+				break
 			} else {
 				if err := p.Unmarshal(buf, credentials); err != nil {
-					return
+					status = http.StatusBadRequest
+					v = bloqs_auth.Invalid("", &status)
+					break
 				}
 				//s.ServeHTTP(w, r)
 			}
 		} else {
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			w.Header().Add("Accept", bloqs_http.X_WWW_FORM_URLENCODED)
-			w.Header().Add("Accept", bloqs_http.GRPC)
-			return
+			status = http.StatusUnsupportedMediaType
+            bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
+            bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
+			v = bloqs_auth.Invalid("", &status)
+			break
 		}
 
-		switch r.URL.Query().Get(bloqs_http.Query) {
+		if !r.URL.Query().Has(bloqs_http.GetQuery()) {
+			status = http.StatusBadRequest
+			v = bloqs_auth.Invalid("", &status)
+			break
+		}
+
+		method := r.URL.Query().Get(bloqs_http.GetQuery())
+		switch method {
 		case "basic":
+			if !bloqs_auth.IsAuthMethodSupported(method) {
+				status = http.StatusUnprocessableEntity
+				v = bloqs_auth.Invalid("", &status)
+				goto respond
+			}
+
 			if credentials == nil {
 				email := r.FormValue("email")
 
 				if email == "" {
-					w.WriteHeader(http.StatusUnprocessableEntity)
-					return
+					status = http.StatusUnprocessableEntity
+					v = bloqs_auth.Invalid("", &status)
+					goto respond
 				}
 
 				pass := r.FormValue("pass")
 
 				if pass == "" {
-					w.WriteHeader(http.StatusUnprocessableEntity)
-					return
+					status = http.StatusUnprocessableEntity
+					v = bloqs_auth.Invalid("", &status)
+					goto respond
 				}
 
 				credentials = &proto.Credentials{
@@ -88,11 +111,16 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 			}
 
 			a := authSrv(r.Context())
-            v, err = a.SignIn(r.Context(), credentials)
+			v, err = a.SignIn(r.Context(), credentials)
+		default:
+			status = http.StatusBadRequest
+			v = bloqs_auth.Invalid("", &status)
+			goto respond
 		}
 	case http.MethodDelete:
 		if err != nil {
-			return
+			v = bloqs_auth.Invalid("", &status)
+			goto respond
 		}
 
 		var token *proto.Token
@@ -106,37 +134,50 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 
 		if revoke {
 			v, err = a.Revoke(r.Context(), token)
-            println(v, err)
-			return
+			status = http.StatusUnauthorized
+			if v.HttpStatusCode == nil {
+				v.HttpStatusCode = &status
+			}
+			goto respond
 		}
 
 		if jwt != nil {
-			return
+			status = http.StatusUnauthorized
+			v = bloqs_auth.Invalid("", &status)
+			goto respond
 		}
 
-		switch r.URL.Query().Get(bloqs_http.Query) {
+		switch r.URL.Query().Get(bloqs_http.GetQuery()) {
 		case "basic":
-            v, err = a.SignOut(r.Context(), token)
+			v, err = a.SignOut(r.Context(), token)
 		}
 	case http.MethodOptions:
-		w.Header().Add("Access-Control-Allow-Methods", http.MethodPost)
-		w.Header().Add("Access-Control-Allow-Methods", http.MethodDelete)
-		w.Header().Add("Access-Control-Allow-Methods", http.MethodOptions)
-		w.Header().Add("Access-Control-Allow-Credentials", "true")
-		//w.Header().Add("Access-Control-Allow-Headers", "")
-		//w.Header().Add("Access-Control-Expose-Headers", "")
+		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
+		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)
+		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		//bloqs_http.Append(&h, "Access-Control-Allow-Headers", "")
+		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
 		//w.Header().Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
 		w.Header().Set("Access-Control-Max-Age", "0")
-		w.WriteHeader(http.StatusOK)
-        return
+		if err != nil {
+			w.Write([]byte(err.Error()))
+		}
+		v = &proto.Validation{
+			Valid:          err == nil,
+			HttpStatusCode: &status,
+		}
+		goto respond
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-        return
+		status = http.StatusMethodNotAllowed
+		v = bloqs_auth.Invalid("", &status)
+		goto respond
 	}
 
+respond:
 	if v != nil {
 		if code := v.HttpStatusCode; code != nil {
-			status = uint16(*code)
+			status = *code
 			v.HttpStatusCode = nil
 		} else {
 			if err != nil {
@@ -150,12 +191,12 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		w.WriteHeader(int(status))
+
 		if status != http.StatusNoContent {
 			json.NewEncoder(w).Encode(v)
 			w.Header().Set("Content-Type", "application/json")
 		}
-
-		w.WriteHeader(int(status))
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 	}

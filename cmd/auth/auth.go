@@ -1,17 +1,21 @@
 package main
 
 import (
-	"context"
+	//"context"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
 
-	"github.com/bloqs-sites/bloqsenjin/internal/auth"
+	//"os"
+
+	//"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	auth_http "github.com/bloqs-sites/bloqsenjin/pkg/auth/http"
-	dbh "github.com/bloqs-sites/bloqsenjin/internal/db"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	"github.com/santhosh-tekuri/jsonschema/v5"
+
+	//dbh "github.com/bloqs-sites/bloqsenjin/internal/db"
 	auth_server "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 
@@ -28,17 +32,23 @@ var (
 
 func main() {
 	flag.Parse()
+	if err := conf.Compile(); err != nil {
+        switch err := err.(type) {
+        case jsonschema.InvalidJSONTypeError:
+            panic(err)
+        }
+    }
 
 	ch := make(chan error)
 
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
-	creds := dbh.NewMySQL(os.Getenv("DSN"))
-	secrets := dbh.NewKeyDB(dbh.NewRedisCreds("localhost", 6379, "", 0))
+	//creds := dbh.NewMySQL(os.Getenv("DSN"))
+	//secrets := dbh.NewKeyDB(dbh.NewRedisCreds("localhost", 6379, "", 0))
 
-	auther := auth.NewBloqsAuther(context.Background(), &creds)
-	tokener := auth.NewBloqsTokener(secrets)
+	//auther := auth.NewBloqsAuther(context.Background(), &creds)
+	//tokener := auth.NewBloqsTokener(secrets)
 
-	go startGRPCServer(ch, auther, tokener)
+	//go startGRPCServer(ch, auther, tokener)
 	go startHTTPServer(ch)
 
 	for {

@@ -8,17 +8,30 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 )
 
-var (
-	domains_list = conf.MustGetConfOrDefault[map[string][]string](nil, "domains")
-)
-
 const (
 	DOMAINS_BLACKLIST = iota
 	DOMAINS_WHITELIST
 	DOMAINS_NIL
 )
 
+func getDomainsList() map[string][]string {
+	domains := conf.MustGetConfOrDefault[map[string]any](nil, "domains")
+	domains_list := make(map[string][]string, len(domains))
+
+	for k, v := range domains {
+		domains := make([]string, len(v.([]interface{})))
+		for i, v := range v.([]interface{}) {
+			domains[i] = v.(string)
+		}
+
+		domains_list[k] = domains
+	}
+
+	return domains_list
+}
+
 func GetDomainsListType() ([]string, int) {
+	domains_list := getDomainsList()
 	if domains_list == nil {
 		return nil, DOMAINS_NIL
 	}
@@ -33,6 +46,7 @@ func GetDomainsListType() ([]string, int) {
 }
 
 func GetDomainsType() int {
+	domains_list := getDomainsList()
 	if domains_list == nil {
 		return DOMAINS_NIL
 	}
@@ -58,7 +72,7 @@ func ValidateDomain(domain string) error {
 	case DOMAINS_WHITELIST:
 		for _, d := range v {
 			if d == domain {
-				break
+				return nil;
 			}
 		}
 		return fmt.Errorf("The domain `%s` is a non whitelisted domain", domain)
@@ -67,25 +81,23 @@ func ValidateDomain(domain string) error {
 	return nil
 }
 
-func CheckOriginHeader(w http.ResponseWriter, r *http.Request) error {
+func CheckOriginHeader(h *http.Header, r *http.Request) (uint32, error) {
 	uri, err := url.ParseRequestURI(r.Header.Get("Origin"))
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return err
+		return http.StatusForbidden, err
 	}
 
 	if err := ValidateDomain(uri.Hostname()); err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		return err
+		return http.StatusForbidden, err
 	} else {
 		if GetDomainsType() == DOMAINS_WHITELIST {
-			w.Header().Set("Access-Control-Allow-Origin", uri.String())
-			w.Header().Add("Vary", "Origin")
+			h.Set("Access-Control-Allow-Origin", uri.String())
+			h.Add("Vary", "Origin")
 		} else {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			h.Set("Access-Control-Allow-Origin", "*")
 		}
 	}
 
-	return nil
+	return http.StatusOK, nil
 }

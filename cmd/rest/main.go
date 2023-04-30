@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"log"
@@ -57,7 +58,7 @@ func main() {
 			parts = append(parts, "")
 		}
 
-		go dbh.Insert("preference", []map[string]string{
+		go dbh.Insert(context.Background(), "preference", []map[string]string{
 			{
 				"name":        parts[0],
 				"description": parts[1],
@@ -65,8 +66,8 @@ func main() {
 		})
 	}
 
-	s.AttachHandler("preference", new(models.PreferenceHandler))
-	s.AttachHandler("bloq", new(models.BloqHandler))
+	s.AttachHandler(context.Background(), "preference", new(models.PreferenceHandler))
+	s.AttachHandler(context.Background(), "bloq", new(models.BloqHandler))
 
 	err = s.Run()
 	if errors.Is(err, http.ErrServerClosed) {

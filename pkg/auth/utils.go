@@ -1,8 +1,11 @@
 package auth
 
-import "github.com/bloqs-sites/bloqsenjin/proto"
+import (
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	"github.com/bloqs-sites/bloqsenjin/proto"
+)
 
-func valid(msg string, status *uint32) *proto.Validation {
+func Valid(msg string, status *uint32) *proto.Validation {
 	return &proto.Validation{
 		Valid:          true,
 		Message:        &msg,
@@ -10,7 +13,7 @@ func valid(msg string, status *uint32) *proto.Validation {
 	}
 }
 
-func invalid(msg string, status *uint32) *proto.Validation {
+func Invalid(msg string, status *uint32) *proto.Validation {
 	return &proto.Validation{
 		Valid:          false,
 		Message:        &msg,
@@ -18,8 +21,8 @@ func invalid(msg string, status *uint32) *proto.Validation {
 	}
 }
 
-func errorToValidation(err error, status *uint32) *proto.Validation {
-	return invalid(err.Error(), status)
+func ErrorToValidation(err error, status *uint32) *proto.Validation {
+	return Invalid(err.Error(), status)
 }
 
 func credentialsToID(c *proto.Credentials) *string {
@@ -32,4 +35,14 @@ func credentialsToID(c *proto.Credentials) *string {
 		id := c.String()
 		return &id
 	}
+}
+
+func IsAuthMethodSupported(s string) bool {
+    for _, v := range conf.MustGetConfOrDefault([]string{}, "auth", "supported") {
+        if v == s {
+            return true
+        }
+    }
+
+    return false
 }

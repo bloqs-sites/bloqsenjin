@@ -25,11 +25,11 @@ const (
 func init() {
 	path, exists := os.LookupEnv(cnf_env_var)
 	if exists {
-		cnf_path = &path
+		*cnf_path = path
 	}
 
 	path, exists = os.LookupEnv(sch_env_var)
 	if exists {
-		sch_path = &path
+		*sch_path = path
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
+	"github.com/bloqs-sites/bloqsenjin/pkg/email"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -28,8 +29,8 @@ type BloqsAuther struct {
 	creds db.DataManipulater
 }
 
-func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) *BloqsAuther {
-	creds.CreateTables(ctx, []db.Table{
+func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) (*BloqsAuther, error) {
+	err := creds.CreateTables(ctx, []db.Table{
 		{
 			Name: table,
 			Columns: []string{
@@ -54,12 +55,16 @@ func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) *BloqsAuther 
 			},
 		},
 	})
-	//creds.CreateViews(ctx, []db.View{})
-	return &BloqsAuther{creds}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &BloqsAuther{creds}, nil
 }
 
 func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) *auth.AuthError {
-	if err := verifyEmail(c.Basic.Email); err != nil {
+	if err := email.VerifyEmail(ctx, c.Basic.Email); err != nil {
 		return auth.NewAuthError(err.Error(), http.StatusBadRequest)
 	}
 
@@ -74,8 +79,23 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
+	exists, err := a.creds.Select(ctx, table, func() map[string]any {
+		return map[string]any{
+			"identifier": new(string),
+			"type":       new(int),
+		}
+	})
+
+	if err != nil {
+
+	}
+
+	if len(exists.Rows) > 1 {
+
+	}
+
 	if _, err := a.creds.Insert(ctx, table, []map[string]string{
-		map[string]string{
+		{
 			"identifier": c.Basic.Email,
 			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
 			"secret":     string(hash),

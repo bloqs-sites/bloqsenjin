@@ -16,6 +16,7 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
+	"github.com/redis/go-redis/v9"
 	p "google.golang.org/protobuf/proto"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -238,13 +239,16 @@ func authSrv(ctx context.Context) (*bloqs_auth.AuthServer, error) {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
 	creds, err := db.NewMySQL(ctx, os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
 	if err != nil {
-		return nil, err
+        return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", creds, err)
 	}
 
-	secrets := db.NewKeyDB(db.NewRedisCreds("localhost", 6379, "", 0))
+    opt, err := redis.ParseURL(os.Getenv("BLOQS_TOKENS_REDIS_DSN"))
+	if err != nil {
+        return nil, fmt.Errorf("could not parse the `BLOQS_TOKENS_REDIS_DSN` to create the credentials to connect to the DB:\t%s", err)
+	}
 
 	a := auth.NewBloqsAuther(ctx, creds)
-	t := auth.NewBloqsTokener(secrets)
+	t := auth.NewBloqsTokener(db.NewKeyDB(opt))
 
 	return bloqs_auth.NewAuthServer(a, t), nil
 }

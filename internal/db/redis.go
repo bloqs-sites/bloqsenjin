@@ -13,29 +13,9 @@ type KeyDB struct {
 	rdb *redis.Client
 }
 
-type RedisCreds struct {
-	domain string
-	port   uint16
-	pass   string
-	db     int
-}
-
-func NewKeyDB(creds RedisCreds) *KeyDB {
+func NewKeyDB(opt *redis.Options) *KeyDB {
 	return &KeyDB{
-		rdb: redis.NewClient(&redis.Options{
-			Addr:     net.JoinHostPort(creds.domain, fmt.Sprint(creds.port)),
-			Password: creds.pass,
-			DB:       creds.db,
-		}),
-	}
-}
-
-func NewRedisCreds(domain string, port uint16, pass string, db int) RedisCreds {
-	return RedisCreds{
-		domain: domain,
-		port:   port,
-		pass:   pass,
-		db:     db,
+		rdb: redis.NewClient(opt),
 	}
 }
 

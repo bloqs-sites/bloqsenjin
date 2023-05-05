@@ -16,7 +16,7 @@ const (
 	DEFAULT_PERMISSIONS = CREATE_BLOQ | UPDATE_BLOQ
 )
 
-var permissions = map[string]auth.Permissions{
+var Permissions = map[string]auth.Permissions{
 	"create_preference": CREATE_PREFERENCE,
 	"update_preference": UPDATE_PREFERENCE,
 	"delete_preference": DELETE_PREFERENCE,

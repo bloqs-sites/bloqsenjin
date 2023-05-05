@@ -20,6 +20,7 @@ func NewMySQL(ctx context.Context, dsn string) (*MySQL, error) {
 	dbh := &MySQL{
 		conn: db,
 	}
+
 	if err != nil {
 		return dbh, err
 	}
@@ -212,11 +213,7 @@ func (dbh *MySQL) Delete(ctx context.Context, table string, conditions []map[str
 
 func (dbh *MySQL) CreateTables(ctx context.Context, ts []db.Table) error {
 	for _, t := range ts {
-		_, err := dbh.conn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);",
-			t.Name, strings.Join(t.Columns, ", ")))
-
-		if err != nil {
-			fmt.Println(err)
+		if _, err := dbh.conn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`(%s);", t.Name, strings.Join(t.Columns, ", "))); err != nil {
 			return err
 		}
 	}

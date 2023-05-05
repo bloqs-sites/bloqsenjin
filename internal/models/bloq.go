@@ -19,7 +19,7 @@ type BloqHandler struct {
 
 func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) {
 	if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
-		return nil, fmt.Errorf("No permissions")
+		return nil, fmt.Errorf("no permissions")
 	}
 
 	if err := r.ParseMultipartForm(64 << 20); err != nil {
@@ -31,19 +31,19 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) 
 	bloqrow["name"] = r.MultipartForm.Value["name"][0]
 
 	if len(bloqrow["name"]) > 80 {
-		return nil, fmt.Errorf("Bloq name provided is too big")
+		return nil, fmt.Errorf("bloq name provided is too big")
 	}
 
 	bloqrow["description"] = r.MultipartForm.Value["description"][0]
 
 	if len(bloqrow["description"]) > 140 {
-		return nil, fmt.Errorf("Bloq description provided is too big")
+		return nil, fmt.Errorf("bloq description provided is too big")
 	}
 
 	bloqrow["category"] = r.MultipartForm.Value["category"][0]
 
 	if _, err := strconv.ParseUint(bloqrow["category"], 10, 0); err != nil {
-		return nil, fmt.Errorf("Category ID `%s` is invalid", bloqrow["category"])
+		return nil, fmt.Errorf("category ID `%s` is invalid", bloqrow["category"])
 	}
 
 	bloqrow["hasAdultConsideration"] = r.MultipartForm.Value["hasAdultConsideration"][0]
@@ -65,7 +65,7 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) 
 	res, err := dbh.Insert(r.Context(), "bloq", []map[string]string{bloqrow})
 
 	if err != nil || res.LastID == nil {
-		return nil, fmt.Errorf("Internal error")
+		return nil, fmt.Errorf("internal error")
 	}
 
 	bloqirow := make(map[string]string)
@@ -76,11 +76,11 @@ func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) 
 		img := r.MultipartForm.File["image"][0]
 
 		if !strings.HasPrefix(img.Header.Get("Content-Type"), "image/") {
-			return nil, fmt.Errorf("File provided has not a Content-Type image/*")
+			return nil, fmt.Errorf("file provided has not a Content-Type image/*")
 		}
 
 		if img.Size > (32 << 20) {
-			return nil, fmt.Errorf("Image to big")
+			return nil, fmt.Errorf("image to big")
 		}
 
 		bloqirow["image"] = img.Filename

@@ -113,7 +113,7 @@ func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]st
 		return db.Result{
 			LastID: nil,
 			Rows:   nil,
-		}, errors.New("No rows to be inserted")
+		}, errors.New("no rows to be inserted")
 	}
 
 	set := make(map[string]bool, len(rows[0]))
@@ -141,7 +141,7 @@ func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]st
 				return db.Result{
 					LastID: nil,
 					Rows:   nil,
-				}, errors.New("Cannot find value for column")
+				}, errors.New("cannot find value for column")
 			}
 
 			rowsvals[i][j] = v

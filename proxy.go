@@ -18,7 +18,7 @@ import (
 type DriverProxy struct {
 	ctx *context.Context         // context in case of need to cancel an operation
 	drv *neo4j.DriverWithContext // refrence to the actual service
-	db  *string                  // database that this proxy uses
+	//db  *string                  // database that this proxy uses
 }
 
 //func (px DriverProxy) createSession(mode neo4j.AccessMode) neo4j.SessionWithContext {

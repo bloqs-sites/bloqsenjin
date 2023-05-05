@@ -37,9 +37,13 @@ func main() {
 	defer conn.Close()
 	c := pb.NewAuthClient(conn)
 
-	dbh := db.NewMySQL("owduser:passwd@/owd")
+	dbh, err := db.NewMySQL(context.Background(), "owduser:passwd@/owd")
 
-	s := rest.NewServer(":8089", &dbh, c)
+	if err != nil {
+		panic(err)
+	}
+
+	s := rest.NewServer(":8089", dbh, c)
 
 	file, err := os.Open("./cmd/rest/preferences")
 

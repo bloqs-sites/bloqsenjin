@@ -31,6 +31,8 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		err    error
 		v      *proto.Validation
 		status uint32
+
+		a *bloqs_auth.AuthServer
 	)
 
 	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
@@ -119,7 +121,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			a, err := authSrv(r.Context())
+			a, err = authSrv(r.Context())
 			if err != nil {
 				status = http.StatusInternalServerError
 				v = bloqs_auth.ErrorToValidation(err, &status)
@@ -141,7 +143,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 
 		var token *proto.Token
 
-		a, err := authSrv(r.Context())
+		a, err = authSrv(r.Context())
 		if err != nil {
 			status = http.StatusInternalServerError
 			v = bloqs_auth.ErrorToValidation(err, &status)
@@ -239,15 +241,19 @@ func authSrv(ctx context.Context) (*bloqs_auth.AuthServer, error) {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
 	creds, err := db.NewMySQL(ctx, os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
 	if err != nil {
-        return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", creds, err)
+		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", creds, err)
 	}
 
-    opt, err := redis.ParseURL(os.Getenv("BLOQS_TOKENS_REDIS_DSN"))
+	opt, err := redis.ParseURL(os.Getenv("BLOQS_TOKENS_REDIS_DSN"))
 	if err != nil {
-        return nil, fmt.Errorf("could not parse the `BLOQS_TOKENS_REDIS_DSN` to create the credentials to connect to the DB:\t%s", err)
+		return nil, fmt.Errorf("could not parse the `BLOQS_TOKENS_REDIS_DSN` to create the credentials to connect to the DB:\t%s", err)
 	}
 
-	a := auth.NewBloqsAuther(ctx, creds)
+	a, err := auth.NewBloqsAuther(ctx, creds)
+	if err != nil {
+		return nil, err
+	}
+
 	t := auth.NewBloqsTokener(db.NewKeyDB(opt))
 
 	return bloqs_auth.NewAuthServer(a, t), nil

@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/redis/go-redis/v9"

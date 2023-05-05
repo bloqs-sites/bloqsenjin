@@ -70,7 +70,7 @@ func (dbh *D1) Select(ctx context.Context, table string, columns func() map[stri
 	if res.Header.Get("Content-Type") != "application/json" {
 		return db.Result{
 			Rows: r,
-		}, errors.New("Unexpected response from the database")
+		}, errors.New("unexpected response from the database")
 	}
 
 	json.NewDecoder(res.Body).Decode(&r)
@@ -82,7 +82,7 @@ func (dbh *D1) Select(ctx context.Context, table string, columns func() map[stri
 
 func (dbh *D1) Insert(ctx context.Context, table string, rows []map[string]string) (db.Result, error) {
 	if len(rows) < 1 {
-		return db.Result{}, errors.New("No rows to be inserted")
+		return db.Result{}, errors.New("no rows to be inserted")
 	}
 
 	set := make(map[string]bool, len(rows[0]))
@@ -98,13 +98,13 @@ func (dbh *D1) Insert(ctx context.Context, table string, rows []map[string]strin
 	}
 
 	type body struct {
-		columns []string
-		rows    []map[string]string
+		Columns []string
+		Rows    []map[string]string
 	}
 	var buf = bytes.NewBuffer(make([]byte, 0))
 	json.NewEncoder(buf).Encode(body{
-		columns: columns,
-		rows:    rows,
+		Columns: columns,
+		Rows:    rows,
 	})
 	res, err := dbh.pull(ctx, http.MethodPut, strings.Join([]string{dbh.url, "DML", table}, "/"), buf)
 	if err != nil {
@@ -112,7 +112,7 @@ func (dbh *D1) Insert(ctx context.Context, table string, rows []map[string]strin
 	}
 
 	if status := res.StatusCode; status < 200 || status >= 300 {
-		return db.Result{}, errors.New("Could not create tables.")
+		return db.Result{}, errors.New("could not create tables")
 	}
 
 	return db.Result{}, nil
@@ -135,7 +135,7 @@ func (dbh *D1) CreateTables(ctx context.Context, ts []db.Table) error {
 	}
 
 	if status := res.StatusCode; status < 200 || status > 299 {
-		return errors.New("Could not create tables.")
+		return errors.New("could not create tables")
 	}
 
 	return nil

@@ -71,7 +71,7 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 	pass := c.Basic.Password
 
 	if len(pass) > 72 { // bcrypt says that "GenerateFromPassword does not accept passwords longer than 72 bytes"
-		return auth.NewAuthError("The password provided it's too long (bigger than 72 bytes)", http.StatusBadRequest)
+		return auth.NewAuthError("the password provided it's too long (bigger than 72 bytes)", http.StatusBadRequest)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
@@ -87,11 +87,11 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 	})
 
 	if err != nil {
-
+		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
 	}
 
 	if len(exists.Rows) > 1 {
-
+		return auth.NewAuthError("credentials already in use", http.StatusBadRequest)
 	}
 
 	if _, err := a.creds.Insert(ctx, table, []map[string]string{

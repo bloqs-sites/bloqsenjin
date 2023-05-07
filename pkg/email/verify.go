@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,26 +18,29 @@ func VerifyEmail(ctx context.Context, email string) error {
 	valid := email_regex.MatchString(email)
 
 	if !valid {
-		return fmt.Errorf("the email `%s` has an invalid format", email)
+		return &InvalidEmailError{email, "invalid format", http.StatusUnprocessableEntity}
 	}
 
 	email_domain := strings.Split(email, "@")[1]
 
 	if err := helpers.ValidateDomain(email_domain); err != nil {
-		return err
+		return &InvalidEmailError{email, err.Error(), http.StatusUnprocessableEntity}
 	}
 
 	mxr, err := net.DefaultResolver.LookupMX(ctx, email_domain)
 	if err != nil {
-		return err
+		return &ServerError{err}
 	}
 
 	sort.SliceStable(mxr, func(i, j int) bool {
 		return mxr[i].Pref < mxr[j].Pref
 	})
 
-	var wg sync.WaitGroup
-	ch := make(chan struct{}, 1)
+	var (
+		wg   sync.WaitGroup
+		once sync.Once
+		ch   = make(chan struct{}, 1)
+	)
 
 	v, t := helpers.GetDomainsListType()
 	for _, i := range mxr {
@@ -44,34 +48,40 @@ func VerifyEmail(ctx context.Context, email string) error {
 		case helpers.DOMAINS_BLACKLIST:
 			for _, d := range v {
 				if d == i.Host {
-					return fmt.Errorf("the email `%s` uses a blacklisted domain for a MX record", email)
+					return &InvalidEmailError{email, fmt.Sprintf("uses the blacklisted domain `%s` for a MX record", i.Host), http.StatusUnprocessableEntity}
 				}
 			}
 		}
 		wg.Add(1)
-		go smtpVerify(email, i.Host, &wg, ch)
+		go smtpVerify(email, i.Host, &wg, ch, &once)
 	}
-	wg.Add(1)
-	go smtpVerify(email, email_domain, &wg, ch)
+	//wg.Add(1)
+	//go smtpVerify(email, email_domain, &wg, ch, &once)
 
-	done := false
+	done, wait := false, make(chan struct{}, 1)
 	for {
 		select {
 		case <-ch:
 			return nil
+		case <-wait:
+			return &InvalidEmailError{email, "could not be validated. it might not exist. try other email", http.StatusUnprocessableEntity}
 		default:
-			if !done {
-				done = true
+			if done {
+				continue
+			}
 
+			done = true
+
+			go func() {
 				wg.Wait()
 
-				return fmt.Errorf("the email `%s` could not be validated. it might not exist or the domain isn't allowed", email)
-			}
+				close(wait)
+			}()
 		}
 	}
 }
 
-func smtpVerify(email, mx string, wg *sync.WaitGroup, ch chan struct{}) {
+func smtpVerify(email, mx string, wg *sync.WaitGroup, ch chan struct{}, once *sync.Once) {
 	defer wg.Done()
 
 	done := false
@@ -81,9 +91,13 @@ func smtpVerify(email, mx string, wg *sync.WaitGroup, ch chan struct{}) {
 		case <-ch:
 			return
 		default:
-			if !done {
-				done = true
+			if done {
+				continue
+			}
 
+			done = true
+
+			go func() {
 				con, err := net.Dial("tcp", net.JoinHostPort(mx, strconv.Itoa(25)))
 
 				if err != nil {
@@ -130,8 +144,10 @@ func smtpVerify(email, mx string, wg *sync.WaitGroup, ch chan struct{}) {
 					return
 				}
 
-				close(ch)
-			}
+				once.Do(func() {
+					close(ch)
+				})
+			}()
 		}
 	}
 }

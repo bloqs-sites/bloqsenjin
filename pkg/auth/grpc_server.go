@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 )
 
@@ -28,7 +29,11 @@ func (s *AuthServer) SignIn(ctx context.Context, in *proto.Credentials) (*proto.
 	switch x := in.Credentials.(type) {
 	case *proto.Credentials_Basic:
 		if err := s.auther.SignInBasic(ctx, x); err != nil {
-			status = uint32(err.http_status_code)
+			var status uint32 = http.StatusInternalServerError
+			if err, ok := err.(*mux.HttpError); ok {
+				status = uint32(err.Status)
+			}
+
 			return ErrorToValidation(err, &status), err
 		}
 	case nil:
@@ -37,7 +42,8 @@ func (s *AuthServer) SignIn(ctx context.Context, in *proto.Credentials) (*proto.
 		return Invalid("Recieved forbidden on unsupported Credentials.", nil), fmt.Errorf("credentials has unexpected type %T", x)
 	}
 
-	status = http.StatusNoContent
+	//status = http.StatusNoContent
+	status = http.StatusOK
 	if id := credentialsToID(in); id != nil {
 		return Valid(fmt.Sprintf("Credentials for `%s` were created with success!", *id), &status), nil
 	} else {

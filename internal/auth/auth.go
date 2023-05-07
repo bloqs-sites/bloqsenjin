@@ -2,12 +2,14 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	"github.com/bloqs-sites/bloqsenjin/pkg/email"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -63,20 +65,32 @@ func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) (*BloqsAuther
 	return &BloqsAuther{creds}, nil
 }
 
-func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) *auth.AuthError {
+func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
 	if err := email.VerifyEmail(ctx, c.Basic.Email); err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusBadRequest)
+		status := uint16(http.StatusInternalServerError)
+
+		switch err := err.(type) {
+		case *email.InvalidEmailError:
+			status = err.Status
+		case *email.ServerError:
+			status = uint16(http.StatusInternalServerError)
+		}
+
+		return &mux.HttpError{
+			Body:   err.Error(),
+			Status: status,
+		}
 	}
 
 	pass := c.Basic.Password
 
 	if len(pass) > 72 { // bcrypt says that "GenerateFromPassword does not accept passwords longer than 72 bytes"
-		return auth.NewAuthError("the password provided it's too long (bigger than 72 bytes)", http.StatusBadRequest)
+		return errors.New("the password provided it's too long (bigger than 72 bytes)")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	exists, err := a.creds.Select(ctx, table, func() map[string]any {
@@ -84,14 +98,20 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 			"identifier": new(string),
 			"type":       new(int),
 		}
+	}, map[string]any{
+		"identifier": c.Basic.Email,
+		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
 	})
 
 	if err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
-	if len(exists.Rows) > 1 {
-		return auth.NewAuthError("credentials already in use", http.StatusBadRequest)
+	if len(exists.Rows) > 0 {
+		return &mux.HttpError{
+			Body:   "credentials already in use",
+			Status: http.StatusConflict,
+		}
 	}
 
 	if _, err := a.creds.Insert(ctx, table, []map[string]string{
@@ -101,30 +121,30 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 			"secret":     string(hash),
 		},
 	}); err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	return nil
 }
 
-func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic, tk *proto.Token, t auth.Tokener) *auth.AuthError {
+func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic, tk *proto.Token, t auth.Tokener) error {
 	if err := a.CheckAccessBasic(ctx, c); err != nil {
 		return err
 	}
 
 	if _, err := a.creds.Delete(ctx, table, []map[string]any{
-		map[string]any{
+		{
 			"identifier": c.Basic.Email,
 			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
 		},
 	}); err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	return nil
 }
 
-func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_Basic, p auth.Permissions, t auth.Tokener) (auth.Token, *auth.AuthError) {
+func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_Basic, p auth.Permissions, t auth.Tokener) (auth.Token, error) {
 	if err := a.CheckAccessBasic(ctx, c); err != nil {
 		return "", err
 	}
@@ -135,21 +155,21 @@ func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_
 	})
 
 	if err != nil {
-		return tk, auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return tk, err
 	}
 
 	return tk, nil
 }
 
-func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) *auth.AuthError {
+func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
 	hashes, err := a.creds.Select(ctx, table, func() map[string]any {
 		return map[string]any{
 			"secret": new(string),
 		}
-	})
+	}, nil)
 
 	if err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	var hash []byte
@@ -171,7 +191,7 @@ func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials
 	}
 
 	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
-		return auth.NewAuthError(err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	return nil

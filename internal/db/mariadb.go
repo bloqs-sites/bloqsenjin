@@ -36,64 +36,73 @@ func NewMySQL(ctx context.Context, dsn string) (*MySQL, error) {
 	return dbh, nil
 }
 
-func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[string]any) (db.Result, error) {
+func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[string]any, where map[string]any) (res db.Result, err error) {
 	r := make([]db.JSON, 0)
 
-	column := columns()
+	res.Rows = r
 
+	column := columns()
 	cl := len(column)
 	if cl < 1 {
-		return db.Result{
-			LastID: nil,
-			Rows:   r,
-		}, nil
+		return
 	}
 
-	i, keys := 0, make([]string, cl)
+	keys := make([]string, 0, cl)
 	for k := range column {
-		keys[i] = k
-		i++
+		keys = append(keys, k)
 	}
 
-	rows, err := dbh.conn.QueryContext(ctx, fmt.Sprintf("SELECT %s FROM `%s`;", strings.Join(keys, ", "), table))
+	conditions := make([]string, 0, len(where))
+	vals := make([]any, 0, len(conditions))
+	if where != nil {
+		for _, k := range keys {
+			v, ok := where[k]
 
-	if err != nil {
-		return db.Result{
-			LastID: nil,
-			Rows:   r,
-		}, err
+			if !ok {
+				continue
+			}
+
+			conditions = append(conditions, fmt.Sprintf("`%s` = ?", k))
+			vals = append(vals, v)
+		}
+	}
+
+	var rows *sql.Rows
+
+	if where != nil {
+		var stmt *sql.Stmt
+		stmt, err = dbh.conn.PrepareContext(ctx, fmt.Sprintf("SELECT %s FROM `%s` WHERE %s;", strings.Join(keys, ", "), table, strings.Join(conditions, " AND ")))
+		if err != nil {
+			return
+		}
+		defer stmt.Close()
+
+		rows, err = stmt.QueryContext(ctx, vals...)
+	} else {
+		rows, err = dbh.conn.QueryContext(ctx, fmt.Sprintf("SELECT %s FROM `%s`;", strings.Join(keys, ", "), table))
 	}
 
 	defer rows.Close()
-
 	if err != nil {
-		return db.Result{
-			LastID: nil,
-			Rows:   r,
-		}, err
+		return
 	}
 
 	for rows.Next() {
 		loopc := columns()
 
-		vals := make([]any, len(column))
+		vals := make([]any, 0, len(column))
 
-		i := 0
 		for _, v := range keys {
-			vals[i] = loopc[v]
-			i++
+			vals = append(vals, loopc[v])
 		}
 
-		if err := rows.Scan(vals...); err != nil {
-			return db.Result{
-				LastID: nil,
-				Rows:   r,
-			}, err
+		if err = rows.Scan(vals...); err != nil {
+			return
 		}
 
 		row := make(db.JSON, len(column))
 
-		i = 0
+		i := 0
 		for _, v := range keys {
 			row[v] = vals[i]
 			i++
@@ -102,10 +111,11 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 		r = append(r, row)
 	}
 
-	return db.Result{
-		LastID: nil,
-		Rows:   r,
-	}, rows.Err()
+	res.Rows = r
+
+	err = rows.Err()
+
+	return
 }
 
 func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]string) (db.Result, error) {

@@ -46,12 +46,9 @@ func main() {
 	//go startGRPCServer(ch, auther, tokener)
 	go startHTTPServer(ch)
 
-	for {
-		select {
-		case err := <-ch:
-			if err != nil {
-				panic(err)
-			}
+	for i := range ch {
+		if i != nil {
+			panic(i)
 		}
 	}
 }

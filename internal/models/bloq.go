@@ -116,7 +116,7 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, error) {
 			return nil, err
 		}
 
-		res, err := dbh.Select(r.Context(), "bloq_basic", h.MapGenerator())
+		res, err := dbh.Select(r.Context(), "bloq_basic", h.MapGenerator(), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +150,7 @@ func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, error) {
 		return json, nil
 	}
 
-	res, err := dbh.Select(context.Background(), "bloq_basic", h.MapGenerator())
+	res, err := dbh.Select(context.Background(), "bloq_basic", h.MapGenerator(), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -43,7 +43,7 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, erro
 			return nil, err
 		}
 
-		res, err := dbh.Select(r.Context(), "preference", p.MapGenerator())
+		res, err := dbh.Select(r.Context(), "preference", p.MapGenerator(), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, erro
 		return json, nil
 	}
 
-	res, err := dbh.Select(r.Context(), "preference", p.MapGenerator())
+	res, err := dbh.Select(r.Context(), "preference", p.MapGenerator(), nil)
 	if err != nil {
 		return nil, err
 	}

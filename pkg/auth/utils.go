@@ -25,7 +25,7 @@ func ErrorToValidation(err error, status *uint32) *proto.Validation {
 	return Invalid(err.Error(), status)
 }
 
-func credentialsToID(c *proto.Credentials) *string {
+func CredentialsToID(c *proto.Credentials) *string {
 	switch x := c.Credentials.(type) {
 	case *proto.Credentials_Basic:
 		return &x.Basic.Email

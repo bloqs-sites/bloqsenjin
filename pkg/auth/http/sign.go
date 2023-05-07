@@ -32,7 +32,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		v      *proto.Validation
 		status uint32
 
-		a *bloqs_auth.AuthServer
+		a proto.AuthServer
 	)
 
 	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
@@ -237,7 +237,7 @@ respond:
 //	}, nil
 //}
 
-func authSrv(ctx context.Context) (*bloqs_auth.AuthServer, error) {
+func authSrv(ctx context.Context) (proto.AuthServer, error) {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
 	creds, err := db.NewMySQL(ctx, os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
 	if err != nil {
@@ -254,7 +254,12 @@ func authSrv(ctx context.Context) (*bloqs_auth.AuthServer, error) {
 		return nil, err
 	}
 
-	t := auth.NewBloqsTokener(db.NewKeyDB(opt))
+    secrets, err := db.NewKeyDB(ctx, opt)
+	if err != nil {
+		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", secrets, err)
+	}
+
+	t := auth.NewBloqsTokener(secrets)
 
 	return bloqs_auth.NewAuthServer(a, t), nil
 }

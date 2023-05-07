@@ -37,14 +37,16 @@ func (s *AuthServer) SignIn(ctx context.Context, in *proto.Credentials) (*proto.
 			return ErrorToValidation(err, &status), err
 		}
 	case nil:
-		return Invalid("Did not recieve Credentials.", nil), errors.New("credentials cannot be nil")
+		status = http.StatusBadRequest
+		return Invalid("Did not recieve Credentials.", &status), errors.New("credentials cannot be nil")
 	default:
-		return Invalid("Recieved forbidden on unsupported Credentials.", nil), fmt.Errorf("credentials has unexpected type %T", x)
+		status = http.StatusBadRequest
+		return Invalid("Recieved forbidden on unsupported Credentials.", &status), fmt.Errorf("credentials has unexpected type %T", x)
 	}
 
 	//status = http.StatusNoContent
-	status = http.StatusOK
-	if id := credentialsToID(in); id != nil {
+	status = http.StatusCreated
+	if id := CredentialsToID(in); id != nil {
 		return Valid(fmt.Sprintf("Credentials for `%s` were created with success!", *id), &status), nil
 	} else {
 		return Valid("Credentials were created with success!", &status), nil
@@ -63,7 +65,7 @@ func (s *AuthServer) SignOut(ctx context.Context, in *proto.Token) (*proto.Valid
 	//	return Invalid("Recieved forbidden on unsupported Credentials."), fmt.Errorf("Credentials has unexpected type %T", x)
 	//}
 
-	//if id := credentialsToID(in.Credentials); id != nil {
+	//if id := CredentialsToID(in.Credentials); id != nil {
 	//	return Valid(fmt.Sprintf("Credentials for `%s` were deleted with success!", *id)), nil
 	//} else {
 	//	return Valid("Credentials were deleted with success!"), nil
@@ -75,45 +77,61 @@ func (s *AuthServer) SignOut(ctx context.Context, in *proto.Token) (*proto.Valid
 }
 
 func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*proto.TokenValidation, error) {
-	//var (
-	//	token       Token
-	//	err         error
-	//	permissions = NIL
-	//	validation  *proto.Validation
-	//)
+	var (
+		token       Token
+		err         error
+		permissions = NIL
+		validation  *proto.Validation
+		status      uint32
+	)
 
-	//switch x := in.Credentials.Credentials.(type) {
-	//case *proto.Credentials_Basic:
-	//	token, err = s.auther.GrantTokenBasic(ctx, x, Permissions(in.Permissions), s.tokener)
-	//case nil:
-	//	err = errors.New("Credentials cannot be nil")
-	//default:
-	//	err = fmt.Errorf("Credentials.Creds has unexpected type %T", x)
-	//}
+	switch x := in.Credentials.Credentials.(type) {
+	case *proto.Credentials_Basic:
+		token, err = s.auther.GrantTokenBasic(ctx, x, Permissions(in.Permissions), s.tokener)
+		if err != nil {
+			status = http.StatusInternalServerError
+			if err, ok := err.(*mux.HttpError); ok {
+				status = uint32(err.Status)
+			}
 
-	//if err == nil {
-	//	permissions = Permissions(in.Permissions)
-	//}
+			return &proto.TokenValidation{
+				Validation: ErrorToValidation(err, &status),
+				Token:      nil,
+			}, err
+		}
+	case nil:
+		status = http.StatusBadRequest
+		validation = Invalid("Did not recieve Credentials.", &status)
+		err = errors.New("credentials cannot be nil")
+		return &proto.TokenValidation{
+			Validation: validation,
+			Token:      nil,
+		}, err
+	default:
+		status = http.StatusBadRequest
+		validation = Invalid("Recieved forbidden on unsupported Credentials.", &status)
+		err = fmt.Errorf("credentials has unexpected type %T", x)
+		return &proto.TokenValidation{
+			Validation: validation,
+			Token:      nil,
+		}, err
+	}
 
-	//if err == nil {
-	//	if id := credentialsToID(in.Credentials); id != nil {
-	//		validation = Valid(fmt.Sprintf("The Credentials for `%s` are Valid, here is your token!", *id))
-	//	} else {
-	//		validation = Valid("The Credentials are Valid, here is your token!")
-	//	}
-	//} else {
-	//	validation = ErrorToValidation(err)
-	//}
+	permissions = Permissions(in.Permissions)
+	status = http.StatusOK
+	if id := CredentialsToID(in.Credentials); id != nil {
+		validation = Valid(fmt.Sprintf("Credentials for `%s` were created with success!", *id), &status)
+	} else {
+		validation = Valid("Credentials were created with success!", &status)
+	}
 
-	//return &proto.TokenValidation{
-	//	Validation: Validation,
-	//	Token: &proto.Token{
-	//		Jwt:         []byte(token),
-	//		Permissions: (*uint64)(&permissions),
-	//	},
-	//}, err
-
-	return nil, nil
+	return &proto.TokenValidation{
+		Validation: validation,
+		Token: &proto.Token{
+			Jwt:         []byte(token),
+			Permissions: (*uint64)(&permissions),
+		},
+	}, err
 }
 
 func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Validation, error) {

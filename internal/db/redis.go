@@ -12,25 +12,29 @@ type KeyDB struct {
 	rdb *redis.Client
 }
 
-func NewKeyDB(opt *redis.Options) *KeyDB {
-	return &KeyDB{
+func NewKeyDB(ctx context.Context, opt *redis.Options) (*KeyDB, error) {
+	dbh := &KeyDB{
 		rdb: redis.NewClient(opt),
 	}
+
+    // we should
+	_ = dbh.rdb.Ping(ctx)
+
+	return dbh, nil
 }
 
 func (db *KeyDB) Get(ctx context.Context, key ...string) (map[string][]byte, error) {
 	res := make(map[string][]byte, len(key))
 
-	var err error
 	for _, i := range key {
-		e := db.rdb.Get(ctx, i)
+		v, err := db.rdb.Get(ctx, i).Result()
 
-		if err = e.Err(); err != nil {
+		if err != redis.Nil {
+			res[i] = nil
+		} else if err != nil {
 			return nil, err
-		}
-
-		if res[i], err = e.Bytes(); err != nil {
-			return nil, err
+		} else {
+			res[i] = []byte(v)
 		}
 	}
 

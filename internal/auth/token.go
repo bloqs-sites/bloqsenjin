@@ -20,55 +20,53 @@ func NewBloqsTokener(secrets db.KVDBer) *BloqsTokener {
 	return &BloqsTokener{secrets}
 }
 
-func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (auth.Token, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
-		*p,
-		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "bloqsenjin",
-			Subject:   p.Client,
-		},
-	})
+func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr auth.Token, err error) {
+	tokenstr = ""
 
 	key := fmt.Sprintf(jwt_prefix, p.Client)
 
-	secrets, err := t.secrets.Get(ctx, key)
-
-	var secret []byte
-	ok := true
-
+	var secrets map[string][]byte
+	secrets, err = t.secrets.Get(ctx, key)
 	if err != nil {
-		ok = false
+        println("TSG", err.Error())
+		return
 	}
 
-	if ok {
-		secret, ok = secrets[key]
-	}
+	secret, ok := secrets[key]
 
-	if !ok {
+	if !ok { // create a new secret
 		secret := make([]byte, 32)
-		_, err := rand.Read(secret)
 
-		if err != nil {
-			panic(err)
+		if _, err = rand.Read(secret); err != nil {
+        println("RR", err.Error())
+			return
+		}
+
+		puts := make(map[string][]byte, 1)
+		puts[key] = secret
+		if err = t.secrets.Put(ctx, puts, 7*time.Minute); err != nil {
+        println("TSP", err.Error())
+			return
 		}
 	}
 
-	tokenstr, err := token.SignedString(secret)
+	var (
+		str   string
+		token = jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
+			*p,
+			jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+				IssuedAt:  jwt.NewNumericDate(time.Now()),
+				NotBefore: jwt.NewNumericDate(time.Now()),
+				Issuer:    "bloqsenjin",
+				Subject:   p.Client,
+			},
+		})
+	)
+	str, err = token.SignedString(secret)
+	tokenstr = auth.Token(str)
 
-	if err != nil {
-		panic(err)
-	}
-
-	if !ok {
-		puts := make(map[string][]byte, 1)
-		puts[key] = secret
-		t.secrets.Put(ctx, puts, 7*time.Minute)
-	}
-
-	return auth.Token(tokenstr), err
+	return
 }
 
 func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Permissions) bool {

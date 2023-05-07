@@ -23,4 +23,5 @@ var Permissions = map[string]auth.Permissions{
 	"create_bloq":       CREATE_BLOQ,
 	"update_bloq":       UPDATE_BLOQ,
 	"delete_bloq":       DELETE_BLOQ,
+	"default":           DEFAULT_PERMISSIONS,
 }

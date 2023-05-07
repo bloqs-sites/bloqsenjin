@@ -88,10 +88,7 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 		return errors.New("the password provided it's too long (bigger than 72 bytes)")
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
+	// TODO: test password entropy
 
 	exists, err := a.creds.Select(ctx, table, func() map[string]any {
 		return map[string]any{
@@ -112,6 +109,11 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 			Body:   "credentials already in use",
 			Status: http.StatusConflict,
 		}
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+	if err != nil {
+		return err
 	}
 
 	if _, err := a.creds.Insert(ctx, table, []map[string]string{
@@ -144,54 +146,51 @@ func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Bas
 	return nil
 }
 
-func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_Basic, p auth.Permissions, t auth.Tokener) (auth.Token, error) {
-	if err := a.CheckAccessBasic(ctx, c); err != nil {
-		return "", err
+func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_Basic, p auth.Permissions, t auth.Tokener) (tk auth.Token, err error) {
+	if err = a.CheckAccessBasic(ctx, c); err != nil {
+		return
 	}
 
-	tk, err := t.GenToken(ctx, &auth.Payload{
-		Client:      c.Basic.Email,
+	tk, err = t.GenToken(ctx, &auth.Payload{
+		Client: *auth.CredentialsToID(&proto.Credentials{
+			Credentials: c,
+		}),
 		Permissions: p,
 	})
 
-	if err != nil {
-		return tk, err
-	}
-
-	return tk, nil
+	return
 }
 
 func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
-	hashes, err := a.creds.Select(ctx, table, func() map[string]any {
+	res, err := a.creds.Select(ctx, table, func() map[string]any {
 		return map[string]any{
-			"secret": new(string),
+			"secret": new([]byte),
 		}
-	}, nil)
+	}, map[string]any{
+		"identifier": c.Basic.Email,
+		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+	})
 
 	if err != nil {
-		return err
+		return &mux.HttpError{
+			Body:   err.Error(),
+			Status: http.StatusInternalServerError,
+		}
 	}
 
-	var hash []byte
-	for _, i := range hashes.Rows {
-		if v, ok := i["identifier"]; !ok || v != c.Basic.Email {
-			continue
+	if len(res.Rows) != 1 {
+		return &mux.HttpError{
+			Body:   "wrong credentials",
+			Status: http.StatusUnauthorized,
 		}
-		if v, ok := i["type"]; !ok || v != strconv.Itoa(int(auth.BASIC_EMAIL)) {
-			continue
-		}
-
-		h, ok := i["type"]
-		if !ok {
-			continue
-		}
-
-		hash = h.([]byte)
-		break
 	}
 
-	if err := bcrypt.CompareHashAndPassword(hash, []byte(c.Basic.GetPassword())); err != nil {
-		return err
+	secret := res.Rows[0]["secret"].(*[]byte)
+	if err := bcrypt.CompareHashAndPassword(*secret, []byte(c.Basic.GetPassword())); err != nil {
+		return &mux.HttpError{
+			Body:   "wrong credentials",
+			Status: http.StatusUnauthorized,
+		}
 	}
 
 	return nil

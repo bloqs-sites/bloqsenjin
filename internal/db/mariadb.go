@@ -55,13 +55,7 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 	conditions := make([]string, 0, len(where))
 	vals := make([]any, 0, len(conditions))
 	if where != nil {
-		for _, k := range keys {
-			v, ok := where[k]
-
-			if !ok {
-				continue
-			}
-
+		for k, v := range where {
 			conditions = append(conditions, fmt.Sprintf("`%s` = ?", k))
 			vals = append(vals, v)
 		}

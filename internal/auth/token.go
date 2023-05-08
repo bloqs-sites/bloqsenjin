@@ -28,7 +28,6 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 	var secrets map[string][]byte
 	secrets, err = t.secrets.Get(ctx, key)
 	if err != nil {
-        println("TSG", err.Error())
 		return
 	}
 
@@ -38,14 +37,12 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 		secret := make([]byte, 32)
 
 		if _, err = rand.Read(secret); err != nil {
-        println("RR", err.Error())
 			return
 		}
 
 		puts := make(map[string][]byte, 1)
 		puts[key] = secret
 		if err = t.secrets.Put(ctx, puts, 7*time.Minute); err != nil {
-        println("TSP", err.Error())
 			return
 		}
 	}

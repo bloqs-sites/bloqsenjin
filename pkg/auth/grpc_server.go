@@ -128,7 +128,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 	return &proto.TokenValidation{
 		Validation: validation,
 		Token: &proto.Token{
-			Jwt:         []byte(token),
+			Jwt:         string(token),
 			Permissions: (*uint64)(&permissions),
 		},
 	}, err

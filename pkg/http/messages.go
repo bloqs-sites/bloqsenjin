@@ -23,8 +23,21 @@ func GetQuery() string {
 	return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
 }
 
-func GetToken_exp() int {
-	return conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
+func SetToken(w http.ResponseWriter, jwt []byte) error {
+	exp := conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
+
+	http.SetCookie(w, &http.Cookie{
+		Name:    JWT_COOKIE,
+		Value:   string(jwt),
+		Expires: time.Now().Add(time.Duration(exp)),
+		Path:    "/",
+		//Domain: "",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	return nil
 }
 
 func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bool) {
@@ -48,11 +61,13 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bo
 
 	jwt = []byte(cookie.Value)
 
+	exp := conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
+
 	if err = cookie.Valid(); err != nil {
 		goto revocation
 	}
 
-	if i := cookie.MaxAge; i <= 0 || i > GetToken_exp() {
+	if i := cookie.MaxAge; i <= 0 || i > exp {
 		goto revocation
 	}
 

@@ -17,7 +17,7 @@ func NewKeyDB(ctx context.Context, opt *redis.Options) (*KeyDB, error) {
 		rdb: redis.NewClient(opt),
 	}
 
-    // we should
+	// we should
 	_ = dbh.rdb.Ping(ctx)
 
 	return dbh, nil

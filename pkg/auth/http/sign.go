@@ -152,7 +152,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 
 		jwt, revoke := bloqs_http.ExtractToken(w, r)
 		token = &proto.Token{
-			Jwt: jwt,
+			Jwt: string(jwt),
 		}
 
 		if revoke {
@@ -254,7 +254,7 @@ func authSrv(ctx context.Context) (proto.AuthServer, error) {
 		return nil, err
 	}
 
-    secrets, err := db.NewKeyDB(ctx, opt)
+	secrets, err := db.NewKeyDB(ctx, opt)
 	if err != nil {
 		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", secrets, err)
 	}

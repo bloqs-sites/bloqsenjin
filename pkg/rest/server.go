@@ -70,7 +70,7 @@ func (s Server) Run() error {
 
 func (s Server) ValidateJWT(r *http.Request, permitions uint64) bool {
 	res, err := s.auth.Validate(r.Context(), &pb.Token{
-		Jwt:         []byte(r.Header.Get("Authorization")),
+		Jwt:         r.Header.Get("Authorization"),
 		Permissions: &permitions,
 	})
 

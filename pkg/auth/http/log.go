@@ -164,6 +164,10 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 			}
 
 			v, err = a.LogIn(r.Context(), ask)
+			if err == nil {
+				w.Header().Add(bloqs_http.JWT_COOKIE, v.Token.Jwt)
+			}
+
 			goto respond
 		default:
 			status = http.StatusBadRequest
@@ -209,15 +213,15 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 respond:
-	if v := v.Validation; v != nil {
-		if code := v.HttpStatusCode; code != nil {
+	if valid := v.Validation; valid != nil {
+		if code := valid.HttpStatusCode; code != nil {
 			status = *code
-			v.HttpStatusCode = nil
+			valid.HttpStatusCode = nil
 		} else {
 			if err != nil {
 				status = http.StatusInternalServerError
 			} else {
-				if v.Valid {
+				if valid.Valid {
 					status = http.StatusOK
 				} else {
 					status = http.StatusInternalServerError

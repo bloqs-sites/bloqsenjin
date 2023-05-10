@@ -27,7 +27,6 @@ type AuthClient interface {
 	LogIn(ctx context.Context, in *AskPermissions, opts ...grpc.CallOption) (*TokenValidation, error)
 	LogOut(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error)
 	Validate(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error)
-	Revoke(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error)
 }
 
 type authClient struct {
@@ -83,15 +82,6 @@ func (c *authClient) Validate(ctx context.Context, in *Token, opts ...grpc.CallO
 	return out, nil
 }
 
-func (c *authClient) Revoke(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error) {
-	out := new(Validation)
-	err := c.cc.Invoke(ctx, "/bloqs.auth.Auth/Revoke", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AuthServer is the server API for Auth service.
 // All implementations must embed UnimplementedAuthServer
 // for forward compatibility
@@ -101,7 +91,6 @@ type AuthServer interface {
 	LogIn(context.Context, *AskPermissions) (*TokenValidation, error)
 	LogOut(context.Context, *Token) (*Validation, error)
 	Validate(context.Context, *Token) (*Validation, error)
-	Revoke(context.Context, *Token) (*Validation, error)
 	mustEmbedUnimplementedAuthServer()
 }
 
@@ -123,9 +112,6 @@ func (UnimplementedAuthServer) LogOut(context.Context, *Token) (*Validation, err
 }
 func (UnimplementedAuthServer) Validate(context.Context, *Token) (*Validation, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Validate not implemented")
-}
-func (UnimplementedAuthServer) Revoke(context.Context, *Token) (*Validation, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Revoke not implemented")
 }
 func (UnimplementedAuthServer) mustEmbedUnimplementedAuthServer() {}
 
@@ -230,24 +216,6 @@ func _Auth_Validate_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Auth_Revoke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Token)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthServer).Revoke(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/bloqs.auth.Auth/Revoke",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthServer).Revoke(ctx, req.(*Token))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // Auth_ServiceDesc is the grpc.ServiceDesc for Auth service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -274,10 +242,6 @@ var Auth_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Validate",
 			Handler:    _Auth_Validate_Handler,
-		},
-		{
-			MethodName: "Revoke",
-			Handler:    _Auth_Revoke_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

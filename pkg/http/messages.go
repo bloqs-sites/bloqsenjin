@@ -23,12 +23,12 @@ func GetQuery() string {
 	return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
 }
 
-func SetToken(w http.ResponseWriter, jwt []byte) error {
+func SetToken(w http.ResponseWriter, jwt string) error {
 	exp := conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
 
 	http.SetCookie(w, &http.Cookie{
 		Name:    JWT_COOKIE,
-		Value:   string(jwt),
+		Value:   jwt,
 		Expires: time.Now().Add(time.Duration(exp)),
 		Path:    "/",
 		//Domain: "",

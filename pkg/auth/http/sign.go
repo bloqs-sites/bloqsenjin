@@ -156,7 +156,7 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if revoke {
-			v, err = a.Revoke(r.Context(), token)
+			v, err = a.LogOut(r.Context(), token)
 			status = http.StatusUnauthorized
 			if v.HttpStatusCode == nil {
 				v.HttpStatusCode = &status

@@ -165,7 +165,7 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 
 			v, err = a.LogIn(r.Context(), ask)
 			if err == nil {
-				w.Header().Add(bloqs_http.JWT_COOKIE, v.Token.Jwt)
+				bloqs_http.SetToken(w, v.Token.Jwt)
 			}
 
 			goto respond
@@ -179,10 +179,74 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		if err != nil {
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.Invalid("", &status),
+				Validation: bloqs_auth.ErrorToValidation(err, &status),
 			}
 			goto respond
 		}
+
+		var tk *proto.Token
+
+		ct := r.Header.Get("Content-Type")
+		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
+			if err = r.ParseForm(); err != nil {
+				status = http.StatusBadRequest
+				v = &proto.TokenValidation{
+					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
+				}
+				goto respond
+			}
+		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
+			if buf, err := io.ReadAll(r.Body); err != nil {
+				status = http.StatusBadRequest
+				v = &proto.TokenValidation{
+					Validation: bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
+				}
+				goto respond
+			} else {
+				tk = new(proto.Token)
+				if err := p.Unmarshal(buf, tk); err != nil {
+					status = http.StatusBadRequest
+					v = &proto.TokenValidation{
+						Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
+					}
+					goto respond
+				}
+				//s.ServeHTTP(w, r)
+			}
+		} else {
+			status = http.StatusUnsupportedMediaType
+			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
+			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
+			v = &proto.TokenValidation{
+				Validation: bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
+			}
+			goto respond
+		}
+
+		if tk == nil {
+			jwt, _ := bloqs_http.ExtractToken(w, r)
+
+			tk = &proto.Token{
+				Jwt: string(jwt),
+			}
+		}
+
+		a, err = authSrv(r.Context())
+		if err != nil {
+			status = http.StatusInternalServerError
+			v = &proto.TokenValidation{
+				Validation: bloqs_auth.ErrorToValidation(err, &status),
+			}
+			goto respond
+		}
+
+		var valid *proto.Validation
+		valid, err = a.LogOut(r.Context(), tk)
+		v = &proto.TokenValidation{
+			Validation: valid,
+		}
+
+		goto respond
 	case http.MethodOptions:
 		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
 		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)

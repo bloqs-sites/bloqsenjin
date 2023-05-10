@@ -25,11 +25,13 @@ type Payload struct {
 
 type Tokener interface {
 	GenToken(context.Context, *Payload) (Token, error)
-	VerifyToken(context.Context, Token, Permissions) bool
+	VerifyToken(context.Context, Token, Permissions) (bool, error)
+	RevokeToken(context.Context, Token) error
 }
 
 type Auther interface {
 	SignInBasic(context.Context, *proto.Credentials_Basic) error
 	SignOutBasic(context.Context, *proto.Credentials_Basic, *proto.Token, Tokener) error
 	GrantTokenBasic(context.Context, *proto.Credentials_Basic, Permissions, Tokener) (Token, error)
+	RevokeToken(context.Context, *proto.Token, Tokener) error
 }

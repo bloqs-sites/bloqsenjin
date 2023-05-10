@@ -135,19 +135,20 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 }
 
 func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
+	err := s.auther.RevokeToken(ctx, in, s.tokener)
+	valid := true
+	if err != nil {
+		valid = false
+	}
+
 	return &proto.Validation{
-		Valid: true,
-	}, nil
+		Valid: valid,
+	}, err
 }
 
 func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
+	valid, _ := s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions))
 	return &proto.Validation{
-		Valid: s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions)),
-	}, nil
-}
-
-func (s *AuthServer) Revoke(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
-	return &proto.Validation{
-		Valid: s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions)),
+		Valid: valid,
 	}, nil
 }

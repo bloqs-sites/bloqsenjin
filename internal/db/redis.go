@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	//"net"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,6 +16,11 @@ type KeyDB struct {
 func NewKeyDB(ctx context.Context, opt *redis.Options) (*KeyDB, error) {
 	dbh := &KeyDB{
 		rdb: redis.NewClient(opt),
+		//rdb: redis.NewClient(&redis.Options{
+		//	Addr:     net.JoinHostPort("localhost", fmt.Sprint(6379)),
+		//	Password: "",
+		//	DB:       0,
+		//}),
 	}
 
 	// we should
@@ -29,7 +35,7 @@ func (db *KeyDB) Get(ctx context.Context, key ...string) (map[string][]byte, err
 	for _, i := range key {
 		v, err := db.rdb.Get(ctx, i).Result()
 
-		if err != redis.Nil {
+		if err == redis.Nil {
 			res[i] = nil
 		} else if err != nil {
 			return nil, err
@@ -43,7 +49,7 @@ func (db *KeyDB) Get(ctx context.Context, key ...string) (map[string][]byte, err
 
 func (db *KeyDB) Put(ctx context.Context, entries map[string][]byte, ttl time.Duration) error {
 	for k, v := range entries {
-		if err := db.rdb.Set(ctx, string(k), v, ttl).Err(); err != nil {
+		if err := db.rdb.Set(ctx, k, v, ttl).Err(); err != nil {
 			return err
 		}
 	}

@@ -11,7 +11,7 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/email"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -194,4 +194,8 @@ func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials
 	}
 
 	return nil
+}
+
+func (a *BloqsAuther) RevokeToken(ctx context.Context, tk *proto.Token, t auth.Tokener) error {
+	return t.RevokeToken(ctx, auth.Token(tk.Jwt))
 }

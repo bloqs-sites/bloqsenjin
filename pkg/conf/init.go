@@ -3,6 +3,8 @@ package conf
 import (
 	"flag"
 	"os"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 var (

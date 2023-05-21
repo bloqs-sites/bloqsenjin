@@ -9,6 +9,15 @@ import (
 )
 
 func Server() http.HandlerFunc {
+    if err := conf.Compile(); err != nil {
+		panic(err)
+
+		// switch err := err.(type) {
+		// case jsonschema.InvalidJSONTypeError:
+		// 	panic(err)
+		// }
+    }
+
 	sign_route := conf.MustGetConfOrDefault("/sign", "auth", "signPath")
 	log_route := conf.MustGetConfOrDefault("/log", "auth", "logPath")
 	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")

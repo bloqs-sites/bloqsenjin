@@ -78,13 +78,13 @@ func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Pe
 		return (claims.Payload.Permissions & p) == p, nil
 	} else {
 		if errors.Is(err, jwt.ErrTokenMalformed) {
-			return false, errors.Join(errors.New("that's not even a token"), err)
+			return false, fmt.Errorf("that's not even a token:\t%v", err)
 		} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			return false, errors.Join(errors.New("invalid signature"), err)
+			return false, fmt.Errorf("invalid signature:\t%v", err)
 		} else if errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet) {
-			return false, errors.Join(errors.New("timing is everything"), err)
+			return false, fmt.Errorf("timing is everything:\t%v", err)
 		} else {
-			return false, errors.Join(errors.New("couldn't handle this token"), err)
+			return false, fmt.Errorf("couldn't handle this token:\t%v", err)
 		}
 	}
 }
@@ -102,13 +102,13 @@ func (t *BloqsTokener) RevokeToken(ctx context.Context, tk auth.Token) error {
 		return t.secrets.Delete(ctx, key)
 	} else {
 		if errors.Is(err, jwt.ErrTokenMalformed) {
-			return errors.Join(errors.New("that's not even a token"), err)
+			return fmt.Errorf("that's not even a token:\t%v", err)
 		} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			return errors.Join(errors.New("invalid signature"), err)
+			return fmt.Errorf("invalid signature:\t%v", err)
 		} else if errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet) {
-			return errors.Join(errors.New("timing is everything"), err)
+			return fmt.Errorf("timing is everything:\t%v", err)
 		} else {
-			return errors.Join(errors.New("couldn't handle this token"), err)
+			return fmt.Errorf("couldn't handle this token:\t%v", err)
 		}
 	}
 }

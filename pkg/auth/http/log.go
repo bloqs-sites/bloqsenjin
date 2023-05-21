@@ -33,7 +33,7 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 	status, err = helpers.CheckOriginHeader(&h, r)
 
 	switch r.Method {
-	case http.MethodPost:
+	case http.MethodPost: // log in
 		if err != nil {
 			v = &proto.TokenValidation{
 				Validation: bloqs_auth.ErrorToValidation(err, &status),
@@ -153,22 +153,6 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 					Permissions: uint64(permissions),
 				}
 			}
-
-			a, err = authSrv(r.Context())
-			if err != nil {
-				status = http.StatusInternalServerError
-				v = &proto.TokenValidation{
-					Validation: bloqs_auth.ErrorToValidation(err, &status),
-				}
-				goto respond
-			}
-
-			v, err = a.LogIn(r.Context(), ask)
-			if err == nil {
-				bloqs_http.SetToken(w, v.Token.Jwt)
-			}
-
-			goto respond
 		default:
 			status = http.StatusBadRequest
 			v = &proto.TokenValidation{
@@ -176,7 +160,23 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 			}
 			goto respond
 		}
-	case http.MethodDelete:
+
+		a, err = authSrv(r.Context())
+		if err != nil {
+			status = http.StatusInternalServerError
+			v = &proto.TokenValidation{
+				Validation: bloqs_auth.ErrorToValidation(err, &status),
+			}
+			goto respond
+		}
+
+		v, err = a.LogIn(r.Context(), ask)
+		if err == nil {
+			bloqs_http.SetToken(w, v.Token.Jwt)
+		}
+
+		goto respond
+	case http.MethodDelete: // log out
 		if err != nil {
 			v = &proto.TokenValidation{
 				Validation: bloqs_auth.ErrorToValidation(err, &status),
@@ -187,13 +187,29 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 		var tk *proto.Token
 
 		ct := r.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
+		if strings.HasPrefix(ct, bloqs_http.PLAIN) {
+			if buf, err := io.ReadAll(r.Body); err != nil {
+				status = http.StatusBadRequest
+				v = &proto.TokenValidation{
+					Validation: bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
+				}
+				goto respond
+			} else {
+				tk = &proto.Token{
+					Jwt: string(buf),
+				}
+			}
+		} else if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
 					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
 				}
 				goto respond
+			}
+
+			tk = &proto.Token{
+				Jwt: r.FormValue("token"),
 			}
 		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
@@ -215,6 +231,7 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			status = http.StatusUnsupportedMediaType
+			bloqs_http.Append(&h, "Accept", bloqs_http.PLAIN)
 			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
 			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
 			v = &proto.TokenValidation{
@@ -223,8 +240,22 @@ func logRoute(w http.ResponseWriter, r *http.Request) {
 			goto respond
 		}
 
-		if tk == nil {
-			jwt, _ := bloqs_http.ExtractToken(w, r)
+		if (tk == nil) || len(tk.Jwt) <= 0 {
+			var jwt []byte
+			jwt, err = bloqs_http.ExtractToken(w, r)
+
+			if err != nil {
+				status = http.StatusInternalServerError
+				if err, ok := err.(*bloqs_http.HttpError); ok {
+					status = uint32(err.Status)
+				}
+
+				v = &proto.TokenValidation{
+					Validation: bloqs_auth.ErrorToValidation(err, &status),
+				}
+
+				goto respond
+			}
 
 			tk = &proto.Token{
 				Jwt: string(jwt),

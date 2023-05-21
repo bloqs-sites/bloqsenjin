@@ -34,7 +34,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 	secret, ok := secrets[key]
 
 	if !ok || (len(secret) == 0) { // create a new secret
-		secret := make([]byte, 32)
+		secret = make([]byte, 32)
 
 		if _, err = rand.Read(secret); err != nil {
 			return
@@ -52,7 +52,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 		token = jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
 			*p,
 			jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
 				NotBefore: jwt.NewNumericDate(time.Now()),
 				Issuer:    "bloqsenjin",
@@ -60,6 +60,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 			},
 		})
 	)
+
 	str, err = token.SignedString(secret)
 	tokenstr = auth.Token(str)
 

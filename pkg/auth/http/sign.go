@@ -150,17 +150,19 @@ func signRoute(w http.ResponseWriter, r *http.Request) {
 			goto respond
 		}
 
-		jwt, revoke := bloqs_http.ExtractToken(w, r)
+		var jwt []byte
+		jwt, err = bloqs_http.ExtractToken(w, r)
 		token = &proto.Token{
 			Jwt: string(jwt),
 		}
 
-		if revoke {
-			v, err = a.LogOut(r.Context(), token)
-			status = http.StatusUnauthorized
-			if v.HttpStatusCode == nil {
-				v.HttpStatusCode = &status
+		if err != nil {
+			if err, ok := err.(*bloqs_http.HttpError); ok {
+				*v.HttpStatusCode = uint32(err.Status)
+			} else {
+				*v.HttpStatusCode = http.StatusInternalServerError
 			}
+			v, err = a.LogOut(r.Context(), token)
 			goto respond
 		}
 

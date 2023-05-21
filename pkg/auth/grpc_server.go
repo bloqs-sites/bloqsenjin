@@ -136,14 +136,18 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 
 func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
 	err := s.auther.RevokeToken(ctx, in, s.tokener)
-	valid := true
+	var status uint32 = http.StatusOK
+	v := Valid("LogOut", &status)
 	if err != nil {
-		valid = false
+		status = http.StatusInternalServerError
+		if err, ok := err.(*mux.HttpError); ok {
+			status = uint32(err.Status)
+		}
+
+		v = ErrorToValidation(err, &status)
 	}
 
-	return &proto.Validation{
-		Valid: valid,
-	}, err
+	return v, err
 }
 
 func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Validation, error) {

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -14,7 +15,8 @@ const (
 	FORM_DATA             = "multipart/form-data"
 	GRPC                  = "application/grpc"
 
-	JWT_COOKIE = "__Host-bloqs-auth"
+	//JWT_COOKIE = "__Host-bloqs-auth"
+	JWT_COOKIE = "_Host-bloqs-auth"
 
 	BEARER_PREFIX = "Bearer "
 )
@@ -32,7 +34,7 @@ func SetToken(w http.ResponseWriter, jwt string) error {
 		Expires: time.Now().Add(time.Duration(exp)),
 		Path:    "/",
 		//Domain: "",
-		Secure:   true,
+		//Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
@@ -40,22 +42,21 @@ func SetToken(w http.ResponseWriter, jwt string) error {
 	return nil
 }
 
-func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bool) {
-	revoke = false
-
-	cookie, err := r.Cookie(JWT_COOKIE)
+func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error) {
+	var cookie *http.Cookie
+	cookie, err = r.Cookie(JWT_COOKIE)
 	if err == http.ErrNoCookie {
 		header := r.Header.Get("Authorization")
 
 		if !strings.HasPrefix(header, BEARER_PREFIX) {
-			w.WriteHeader(http.StatusUnauthorized)
+			err = &HttpError{Body: "", Status: http.StatusUnauthorized}
 			return
 		}
 
 		jwt = []byte(header[len(BEARER_PREFIX):])
 		return
 	} else if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		err = &HttpError{Body: "", Status: http.StatusInternalServerError}
 		return
 	}
 
@@ -63,30 +64,36 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, revoke bo
 
 	exp := conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
 
+	// TODO: needs to look if the status codes used are the best for the situations.
 	if err = cookie.Valid(); err != nil {
+		err = &HttpError{Body: fmt.Sprintf("invalid HTTP Cookie:\t %v", err), Status: http.StatusBadRequest}
 		goto revocation
 	}
 
 	if i := cookie.MaxAge; i <= 0 || i > exp {
+		err = &HttpError{Body: "the HTTP Cookie is expired", Status: http.StatusBadRequest}
 		goto revocation
 	}
 
 	if cookie.Expires.IsZero() {
+		err = &HttpError{Body: "the HTTP Cookie is expired", Status: http.StatusBadRequest}
 		goto revocation
 	}
 
+	fmt.Printf("%v, %v, %v", !cookie.Secure, !cookie.HttpOnly, cookie.SameSite != http.SameSiteStrictMode)
 	if !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+		// err = &HttpError{Body: "", Status: http.}
 		goto revocation
 	}
 
 	return
 
 revocation:
-	revoke = true
-
 	revokeCookie(cookie, w)
 
-	w.WriteHeader(http.StatusUnauthorized)
+	if err == nil {
+		err = &HttpError{Body: "", Status: http.StatusUnauthorized}
+	}
 	return
 }
 

@@ -42,5 +42,9 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.Serve(w, r)
+    w.Write([]byte(r.RequestURI))
+    w.WriteHeader(200)
+    return
+
+	//auth.Serve(w, r)
 }

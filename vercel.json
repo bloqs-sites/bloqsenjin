@@ -3,7 +3,7 @@
     "public": true,
     "rewrites": [
         {
-            "source": "/api/auth/*",
+            "source": "/api/auth/:path*",
             "destination": "/api/auth.go"
         }
     ]

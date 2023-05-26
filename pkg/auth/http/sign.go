@@ -26,7 +26,7 @@ import (
 //	gRPCPort = flag.Int("gRPCPort", 50051, "The gRPC server port")
 //)
 
-func signRoute(w http.ResponseWriter, r *http.Request) {
+func SignRoute(w http.ResponseWriter, r *http.Request) {
 	var (
 		err    error
 		v      *proto.Validation

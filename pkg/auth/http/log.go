@@ -18,7 +18,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
-func logRoute(w http.ResponseWriter, r *http.Request) {
+func LogRoute(w http.ResponseWriter, r *http.Request) {
 	var (
 		err    error
 		v      *proto.TokenValidation

@@ -23,8 +23,8 @@ func Server() http.HandlerFunc {
 	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
 
 	r := mux.NewRouter()
-	r.Route(sign_route, signRoute)
-	r.Route(log_route, logRoute)
+	r.Route(sign_route, SignRoute)
+	r.Route(log_route, LogRoute)
 	r.Route(types_route, func(w http.ResponseWriter, r *http.Request) {
 		// XXX
 		json.NewEncoder(w).Encode(conf.MustGetConfOrDefault([]any{}, "auth", "supported"))

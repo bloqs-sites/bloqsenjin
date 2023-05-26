@@ -3,8 +3,8 @@
     "public": true,
     "rewrites": [
         {
-            "source": "/api/auth/:path*",
-            "destination": "/api/auth.go"
+            "source": "/api/auth/*",
+            "destination": "/api/auth/*"
         }
     ]
 }

@@ -241,12 +241,12 @@ respond:
 
 func authSrv(ctx context.Context) (proto.AuthServer, error) {
 	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
-	creds, err := db.NewMySQL(ctx, os.Getenv("BLOQS_AUTH_MYSQL_DSN"))
+	creds, err := db.NewMySQL(ctx, strings.TrimSpace(os.Getenv("BLOQS_AUTH_MYSQL_DSN")))
 	if err != nil {
 		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", creds, err)
 	}
 
-	opt, err := redis.ParseURL(os.Getenv("BLOQS_TOKENS_REDIS_DSN"))
+	opt, err := redis.ParseURL(strings.TrimSpace(os.Getenv("BLOQS_TOKENS_REDIS_DSN")))
 	if err != nil {
 		return nil, fmt.Errorf("could not parse the `BLOQS_TOKENS_REDIS_DSN` to create the credentials to connect to the DB:\t%s", err)
 	}

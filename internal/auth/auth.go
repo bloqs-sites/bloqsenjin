@@ -3,8 +3,10 @@ package auth
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
@@ -66,6 +68,7 @@ func NewBloqsAuther(ctx context.Context, creds db.DataManipulater) (*BloqsAuther
 }
 
 func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basic) error {
+	u := time.Now()
 	if err := email.VerifyEmail(ctx, c.Basic.Email); err != nil {
 		status := uint16(http.StatusInternalServerError)
 
@@ -82,6 +85,8 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 		}
 	}
 
+	log.Printf("%s took %v", "VerifyEmail", time.Since(u))
+
 	pass := c.Basic.Password
 
 	if len(pass) > 72 { // bcrypt says that "GenerateFromPassword does not accept passwords longer than 72 bytes"
@@ -90,6 +95,7 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 
 	// TODO: test password entropy
 
+	u = time.Now()
 	exists, err := a.creds.Select(ctx, table, func() map[string]any {
 		return map[string]any{
 			"identifier": new(string),
@@ -99,6 +105,7 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 		"identifier": c.Basic.Email,
 		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
 	})
+	log.Printf("%s took %v", "Select", time.Since(u))
 
 	if err != nil {
 		return err
@@ -111,11 +118,14 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 		}
 	}
 
+	u = time.Now()
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
+	log.Printf("%s took %v", "GenerateFromPassword", time.Since(u))
 
+	u = time.Now()
 	if _, err := a.creds.Insert(ctx, table, []map[string]string{
 		{
 			"identifier": c.Basic.Email,
@@ -125,6 +135,7 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 	}); err != nil {
 		return err
 	}
+	log.Printf("%s took %v", "Insert", time.Since(u))
 
 	return nil
 }

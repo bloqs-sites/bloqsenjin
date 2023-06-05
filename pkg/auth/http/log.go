@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
@@ -27,10 +28,22 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		a proto.AuthServer
 	)
 
-	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
-
 	h := w.Header()
 	status, err = helpers.CheckOriginHeader(&h, r)
+
+	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
+	redirect := conf.MustGetConfOrDefault("redirect", "auth", "redirectQueryParam")
+	location, err_location := url.Parse(r.URL.Query().Get(redirect))
+	var see_other *string
+	if err_location != nil {
+		see_other = nil
+	} else {
+		if location.Hostname() == "" {
+			location.Host = r.Header.Get("Origin")
+		}
+		str := location.String()
+		see_other = &str
+	}
 
 	switch r.Method {
 	case http.MethodPost: // log in
@@ -312,12 +325,22 @@ respond:
 		if code := valid.HttpStatusCode; code != nil {
 			status = *code
 			valid.HttpStatusCode = nil
+
+			if (status >= 200) && (status < 300) && (see_other != nil) {
+				status = 303
+				w.Header().Set("Location", *see_other)
+			}
 		} else {
 			if err != nil {
 				status = http.StatusInternalServerError
 			} else {
 				if valid.Valid {
 					status = http.StatusOK
+
+					if see_other != nil {
+						status = 303
+						w.Header().Set("Location", *see_other)
+					}
 				} else {
 					status = http.StatusInternalServerError
 				}

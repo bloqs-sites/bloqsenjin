@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	httpPort = flag.Int("HTTPPort", 8080, "The HTTP server port")
+	httpPort = flag.Int("HTTPPort", 3000, "The HTTP server port")
 	//gRPCPort = flag.Int("gRPCPort", 50051, "The gRPC server port")
 
 	//s *grpc.Server

@@ -16,7 +16,7 @@ const (
 	GRPC                  = "application/grpc"
 
 	//JWT_COOKIE = "__Host-bloqs-auth"
-	JWT_COOKIE = "__Secure-bloqs-auth"
+	JWT_COOKIE = "_Secure-bloqs-auth"
 
 	BEARER_PREFIX = "Bearer "
 )

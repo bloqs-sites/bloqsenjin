@@ -65,6 +65,14 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				}
 				goto respond
 			}
+        } else if strings.HasPrefix(ct, bloqs_http.FORM_DATA) {
+			if err = r.ParseMultipartForm(32 << 20); err != nil {
+				status = http.StatusBadRequest
+				v = &proto.TokenValidation{
+					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
+				}
+				goto respond
+			}
 		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
@@ -86,6 +94,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		} else {
 			status = http.StatusUnsupportedMediaType
 			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
+			bloqs_http.Append(&h, "Accept", bloqs_http.FORM_DATA)
 			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
 			v = &proto.TokenValidation{
 				Validation: bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
@@ -224,6 +233,18 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			tk = &proto.Token{
 				Jwt: r.FormValue("token"),
 			}
+		} else if strings.HasPrefix(ct, bloqs_http.FORM_DATA) {
+			if err = r.ParseMultipartForm(32 << 20); err != nil {
+				status = http.StatusBadRequest
+				v = &proto.TokenValidation{
+					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
+				}
+				goto respond
+			}
+
+			tk = &proto.Token{
+				Jwt: r.FormValue("token"),
+			}
 		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
@@ -246,6 +267,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusUnsupportedMediaType
 			bloqs_http.Append(&h, "Accept", bloqs_http.PLAIN)
 			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
+			bloqs_http.Append(&h, "Accept", bloqs_http.FORM_DATA)
 			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
 			v = &proto.TokenValidation{
 				Validation: bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),

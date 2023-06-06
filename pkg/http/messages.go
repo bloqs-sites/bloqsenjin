@@ -16,7 +16,7 @@ const (
 	GRPC                  = "application/grpc"
 
 	//JWT_COOKIE = "__Host-bloqs-auth"
-	JWT_COOKIE = "_Host-bloqs-auth"
+	JWT_COOKIE = "__Secure-bloqs-auth"
 
 	BEARER_PREFIX = "Bearer "
 )
@@ -25,18 +25,18 @@ func GetQuery() string {
 	return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
 }
 
-func SetToken(w http.ResponseWriter, jwt string) error {
+func SetToken(w http.ResponseWriter, r *http.Request, jwt string) error {
 	exp := conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
 
 	http.SetCookie(w, &http.Cookie{
-		Name:    JWT_COOKIE,
-		Value:   jwt,
-		Expires: time.Now().Add(time.Duration(exp)),
-		Path:    "/",
-		//Domain: "",
-		//Secure:   true,
+		Name:     JWT_COOKIE,
+		Value:    jwt,
+		Expires:  time.Now().Add(time.Duration(exp)),
+		Path:     "/",
+		Domain:   r.URL.Host,
+		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	})
 
 	return nil
@@ -80,8 +80,7 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error
 		goto revocation
 	}
 
-	fmt.Printf("%v, %v, %v", !cookie.Secure, !cookie.HttpOnly, cookie.SameSite != http.SameSiteStrictMode)
-	if !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+	if !cookie.Secure || !cookie.HttpOnly {
 		// err = &HttpError{Body: "", Status: http.}
 		goto revocation
 	}

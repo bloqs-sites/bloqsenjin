@@ -185,7 +185,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 
 		v, err = a.LogIn(r.Context(), ask)
 		if err == nil {
-			bloqs_http.SetToken(w, v.Token.Jwt)
+			bloqs_http.SetToken(w, r, v.Token.Jwt)
 		}
 
 		goto respond

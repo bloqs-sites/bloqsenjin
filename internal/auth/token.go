@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type BloqsTokener struct {
@@ -48,15 +50,18 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 	}
 
 	var (
-		str   string
-		token = jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
+		str      string
+		auth_api = conf.MustGetConfOrDefault("", "auth", "domain")
+		token    = jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
 			*p,
 			jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
 				NotBefore: jwt.NewNumericDate(time.Now()),
-				Issuer:    "bloqsenjin",
+				Issuer:    auth_api,
 				Subject:   p.Client,
+				Audience:  []string{auth_api},
+				ID:        uuid.NewString(),
 			},
 		})
 	)

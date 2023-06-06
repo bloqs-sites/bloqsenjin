@@ -32,18 +32,6 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 	status, err = helpers.CheckOriginHeader(&h, r)
 
 	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
-	redirect := conf.MustGetConfOrDefault("redirect", "auth", "redirectQueryParam")
-	location, err_location := url.Parse(r.URL.Query().Get(redirect))
-	var see_other *string
-	if err_location != nil {
-		see_other = nil
-	} else {
-		if location.Hostname() == "" {
-			location.Host = r.Header.Get("Origin")
-		}
-		str := location.String()
-		see_other = &str
-	}
 
 	switch r.Method {
 	case http.MethodPost: // log in
@@ -65,7 +53,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				}
 				goto respond
 			}
-        } else if strings.HasPrefix(ct, bloqs_http.FORM_DATA) {
+		} else if strings.HasPrefix(ct, bloqs_http.FORM_DATA) {
 			if err = r.ParseMultipartForm(32 << 20); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
@@ -343,6 +331,8 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 respond:
+	see_other := redirect(r)
+
 	if valid := v.Validation; valid != nil {
 		if code := valid.HttpStatusCode; code != nil {
 			status = *code
@@ -377,5 +367,23 @@ respond:
 		}
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func redirect(r *http.Request) *string {
+	redirect := conf.MustGetConfOrDefault("redirect", "auth", "redirectQueryParam")
+	location, err := url.Parse(r.URL.Query().Get(redirect))
+
+	if err != nil || r.URL.Query().Get(redirect) == "" {
+		return nil
+	} else {
+		if location.Hostname() == "" {
+			if origin, err_origin := url.Parse(r.Header.Get("Origin")); err_origin == nil {
+				location.Host = origin.Host
+			}
+		}
+
+		str := location.String()
+		return &str
 	}
 }

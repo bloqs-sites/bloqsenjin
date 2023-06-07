@@ -83,11 +83,24 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 		permissions = NIL
 		validation  *proto.Validation
 		status      uint32
+		super       bool
 	)
 
 	switch x := in.Credentials.Credentials.(type) {
 	case *proto.Credentials_Basic:
 		err = s.auther.CheckAccessBasic(ctx, x)
+		if err != nil {
+			status = http.StatusInternalServerError
+			if err, ok := err.(*mux.HttpError); ok {
+				status = uint32(err.Status)
+			}
+
+			return &proto.TokenValidation{
+				Validation: ErrorToValidation(err, &status),
+				Token:      nil,
+			}, err
+		}
+		super, err = s.auther.IsSuperBasic(ctx, x)
 		if err != nil {
 			status = http.StatusInternalServerError
 			if err, ok := err.(*mux.HttpError); ok {
@@ -120,6 +133,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 	token, err = s.tokener.GenToken(ctx, &Payload{
 		Client:      *CredentialsToID(in.Credentials),
 		Permissions: Permissions(in.Permissions),
+		Super:       super,
 	})
 	if err != nil {
 		status = http.StatusInternalServerError

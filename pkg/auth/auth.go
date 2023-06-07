@@ -23,6 +23,7 @@ const (
 type Payload struct {
 	Client      string
 	Permissions Permissions
+	Super       bool
 }
 
 type Tokener interface {
@@ -35,6 +36,7 @@ type Auther interface {
 	SignInBasic(context.Context, *proto.Credentials_Basic) error
 	SignOutBasic(context.Context, *proto.Credentials_Basic) error
 	CheckAccessBasic(context.Context, *proto.Credentials_Basic) error
+	IsSuperBasic(context.Context, *proto.Credentials_Basic) (bool, error)
 	GrantSuper(context.Context, *proto.Credentials) error
 	RevokeSuper(context.Context, *proto.Credentials) error
 }

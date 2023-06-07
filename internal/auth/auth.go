@@ -211,6 +211,53 @@ func (a *BloqsAuther) super(ctx context.Context, creds *proto.Credentials, super
 	return nil
 }
 
+func (a *BloqsAuther) IsSuperBasic(ctx context.Context, creds *proto.Credentials_Basic) (super bool, err error) {
+	var ok bool
+	super = false
+
+	if err = a.CheckAccessBasic(ctx, creds); err != nil {
+		if err, ok = err.(*mux.HttpError); ok {
+			return
+		}
+
+		var status uint32 = http.StatusInternalServerError
+		err = &mux.HttpError{
+			Body:   "",
+			Status: uint16(status),
+		}
+		return
+	}
+
+	res, err := a.creds.Select(ctx, table, func() map[string]any {
+		return map[string]any{
+			"is_super": new(bool),
+		}
+	}, map[string]any{
+		"identifier": creds.Basic.Email,
+		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+	})
+
+	if err != nil {
+		err = &mux.HttpError{
+			Body:   err.Error(),
+			Status: http.StatusInternalServerError,
+		}
+		return
+	}
+
+	if len(res.Rows) != 1 {
+		err = &mux.HttpError{
+			Body:   "wrong credentials",
+			Status: http.StatusUnauthorized,
+		}
+		return
+	}
+
+	super = *res.Rows[0]["is_super"].(*bool)
+
+	return
+}
+
 func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
 	res, err := a.creds.Select(ctx, table, func() map[string]any {
 		return map[string]any{

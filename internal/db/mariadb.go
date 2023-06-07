@@ -199,10 +199,44 @@ func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]st
 
 func (dbh *MySQL) Update(ctx context.Context, table string, assignments map[string]any, conditions map[string]any) (db.Result, error) {
 	r := make([]db.JSON, 0)
+
+	if assignments == nil || len(assignments) < 1 {
+		return db.Result{
+			LastID: nil,
+			Rows:   nil,
+		}, errors.New("no assignments")
+	}
+
+	var stmt strings.Builder
+	stmt.WriteString("UPDATE `")
+	stmt.WriteString(table)
+
+	vals := make([]any, 0, len(assignments)+len(conditions))
+
+	set := make([]string, 0, len(assignments))
+	for k, v := range assignments {
+		set = append(set, fmt.Sprintf("`%s`=?", k))
+		vals = append(vals, v)
+	}
+	stmt.WriteString("` SET ")
+	stmt.WriteString(strings.Join(set, ", "))
+
+	if len(conditions) > 0 {
+		where := make([]string, 0, len(conditions))
+		for k, v := range conditions {
+			where = append(where, fmt.Sprintf("`%s`=?", k))
+			vals = append(vals, v)
+		}
+		stmt.WriteString(" WHERE ")
+		stmt.WriteString(strings.Join(where, " AND "))
+	}
+
+	stmt.WriteString(";")
+	_, err := dbh.conn.ExecContext(ctx, stmt.String(), vals...)
 	return db.Result{
 		LastID: nil,
 		Rows:   r,
-	}, nil
+	}, err
 }
 
 func (dbh *MySQL) Delete(ctx context.Context, table string, conditions []map[string]any) (db.Result, error) {

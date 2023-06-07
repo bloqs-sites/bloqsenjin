@@ -9,6 +9,8 @@ service Auth {
   rpc SignOut(Token) returns (Validation);
   rpc LogIn(AskPermissions) returns (TokenValidation);
   rpc LogOut(Token) returns (Validation);
+  rpc GrantSuper(CredentialsWithToken) returns (Validation);
+  rpc RevokeSuper(CredentialsWithToken) returns (Validation);
   rpc Validate(Token) returns (Validation);
 }
 

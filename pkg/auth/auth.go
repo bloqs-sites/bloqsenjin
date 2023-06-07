@@ -13,6 +13,8 @@ type AuthType uint8
 const (
 	NIL                        Permissions = 0
 	SIGN_OUT                               = 1 << iota
+	GRANT_SUPER                            = 1 << iota
+	REVOKE_SUPER                           = 1 << iota
 	NEEDLE_FOR_NEXT_PERMISSION             = iota
 
 	BASIC_EMAIL AuthType = iota - NEEDLE_FOR_NEXT_PERMISSION
@@ -31,7 +33,8 @@ type Tokener interface {
 
 type Auther interface {
 	SignInBasic(context.Context, *proto.Credentials_Basic) error
-	SignOutBasic(context.Context, *proto.Credentials_Basic, *proto.Token, Tokener) error
-	GrantTokenBasic(context.Context, *proto.Credentials_Basic, Permissions, Tokener) (Token, error)
-	RevokeToken(context.Context, *proto.Token, Tokener) error
+	SignOutBasic(context.Context, *proto.Credentials_Basic) error
+	CheckAccessBasic(context.Context, *proto.Credentials_Basic) error
+	GrantSuper(context.Context, *proto.Credentials) error
+	RevokeSuper(context.Context, *proto.Credentials) error
 }

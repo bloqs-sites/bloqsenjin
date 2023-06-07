@@ -140,7 +140,7 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 	return nil
 }
 
-func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic, tk *proto.Token, t auth.Tokener) error {
+func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Basic) error {
 	if err := a.CheckAccessBasic(ctx, c); err != nil {
 		return err
 	}
@@ -157,19 +157,58 @@ func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Bas
 	return nil
 }
 
-func (a *BloqsAuther) GrantTokenBasic(ctx context.Context, c *proto.Credentials_Basic, p auth.Permissions, t auth.Tokener) (tk auth.Token, err error) {
-	if err = a.CheckAccessBasic(ctx, c); err != nil {
-		return
+func (a *BloqsAuther) GrantSuper(ctx context.Context, creds *proto.Credentials) error {
+	return a.super(ctx, creds, true)
+}
+
+func (a *BloqsAuther) RevokeSuper(ctx context.Context, creds *proto.Credentials) error {
+	return a.super(ctx, creds, false)
+}
+
+func (a *BloqsAuther) super(ctx context.Context, creds *proto.Credentials, super bool) (err error) {
+	switch x := creds.Credentials.(type) {
+	case *proto.Credentials_Basic:
+		if err = a.CheckAccessBasic(ctx, x); err != nil {
+			if err, ok := err.(*mux.HttpError); ok {
+				return err
+			}
+
+			var status uint32 = http.StatusInternalServerError
+			return &mux.HttpError{
+				Body:   "",
+				Status: uint16(status),
+			}
+		}
+
+		_, err = a.creds.Update(ctx, table, map[string]any{
+			"is_super": super,
+		}, map[string]any{
+			"identifier": x.Basic.Email,
+			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+		})
+	case nil:
+		status := http.StatusBadRequest
+		return &mux.HttpError{
+			Body:   "did not recieve Credentials.",
+			Status: uint16(status),
+		}
+	default:
+		status := http.StatusBadRequest
+		return &mux.HttpError{
+			Body:   "recieved forbidden on unsupported Credentials.",
+			Status: uint16(status),
+		}
 	}
 
-	tk, err = t.GenToken(ctx, &auth.Payload{
-		Client: *auth.CredentialsToID(&proto.Credentials{
-			Credentials: c,
-		}),
-		Permissions: p,
-	})
+	if err != nil {
+		var status uint32 = http.StatusInternalServerError
+		return &mux.HttpError{
+			Body:   err.Error(),
+			Status: uint16(status),
+		}
+	}
 
-	return
+	return nil
 }
 
 func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials_Basic) error {
@@ -205,8 +244,4 @@ func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials
 	}
 
 	return nil
-}
-
-func (a *BloqsAuther) RevokeToken(ctx context.Context, tk *proto.Token, t auth.Tokener) error {
-	return t.RevokeToken(ctx, auth.Token(tk.Jwt))
 }

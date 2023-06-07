@@ -12,7 +12,6 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/proto"
-	"github.com/redis/go-redis/v9"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -43,52 +42,34 @@ func init() {
 
 func main() {
 	ctx := context.Background()
-	srv, err := authSrv(ctx)
+	a, err := authSrv(ctx)
 	if err != nil {
 		panic(err)
 	}
 
-	v, err := srv.SignIn(ctx, &proto.Credentials{
-		Credentials: &proto.Credentials_Basic{
-			Basic: &proto.Credentials_BasicCredentials{
-				Email:    *email,
-				Password: *password,
-			},
+	user := &proto.Credentials_Basic{
+		Basic: &proto.Credentials_BasicCredentials{
+			Email:    *email,
+			Password: *password,
 		},
-	})
+	}
+	creds := &proto.Credentials{Credentials: user}
 
-	if err != nil {
+	if err = a.SignInBasic(ctx, user); err != nil {
 		panic(err)
 	}
 
-	if !v.Valid {
-		panic(v.Message)
+	if err = a.GrantSuper(ctx, creds); err != nil {
+		a.SignOutBasic(ctx, user)
+		panic(err)
 	}
 }
 
-func authSrv(ctx context.Context) (proto.AuthServer, error) {
-	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
+func authSrv(ctx context.Context) (auth.Auther, error) {
 	creds, err := db.NewMySQL(ctx, strings.TrimSpace(os.Getenv("BLOQS_AUTH_MYSQL_DSN")))
 	if err != nil {
 		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", creds, err)
 	}
 
-	opt, err := redis.ParseURL(strings.TrimSpace(os.Getenv("BLOQS_TOKENS_REDIS_DSN")))
-	if err != nil {
-		return nil, fmt.Errorf("could not parse the `BLOQS_TOKENS_REDIS_DSN` to create the credentials to connect to the DB:\t%s", err)
-	}
-
-	a, err := internal_auth.NewBloqsAuther(ctx, creds)
-	if err != nil {
-		return nil, err
-	}
-
-	secrets, err := db.NewKeyDB(ctx, opt)
-	if err != nil {
-		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", secrets, err)
-	}
-
-	t := internal_auth.NewBloqsTokener(secrets)
-
-	return auth.NewAuthServer(a, t), nil
+	return internal_auth.NewBloqsAuther(ctx, creds)
 }

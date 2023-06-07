@@ -197,7 +197,7 @@ func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]st
 	}, nil
 }
 
-func (dbh *MySQL) Update(ctx context.Context, table string, assignments []map[string]any, conditions []map[string]any) (db.Result, error) {
+func (dbh *MySQL) Update(ctx context.Context, table string, assignments map[string]any, conditions map[string]any) (db.Result, error) {
 	r := make([]db.JSON, 0)
 	return db.Result{
 		LastID: nil,

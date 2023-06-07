@@ -87,7 +87,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 
 	switch x := in.Credentials.Credentials.(type) {
 	case *proto.Credentials_Basic:
-		token, err = s.auther.GrantTokenBasic(ctx, x, Permissions(in.Permissions), s.tokener)
+		err = s.auther.CheckAccessBasic(ctx, x)
 		if err != nil {
 			status = http.StatusInternalServerError
 			if err, ok := err.(*mux.HttpError); ok {
@@ -117,6 +117,22 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 		}, err
 	}
 
+	token, err = s.tokener.GenToken(ctx, &Payload{
+		Client:      *CredentialsToID(in.Credentials),
+		Permissions: Permissions(in.Permissions),
+	})
+	if err != nil {
+		status = http.StatusInternalServerError
+		if err, ok := err.(*mux.HttpError); ok {
+			status = uint32(err.Status)
+		}
+
+		return &proto.TokenValidation{
+			Validation: ErrorToValidation(err, &status),
+			Token:      nil,
+		}, err
+	}
+
 	permissions = Permissions(in.Permissions)
 	status = http.StatusOK
 	if id := CredentialsToID(in.Credentials); id != nil {
@@ -135,7 +151,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 }
 
 func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
-	err := s.auther.RevokeToken(ctx, in, s.tokener)
+	err := s.tokener.RevokeToken(ctx, Token(in.Jwt))
 	var status uint32 = http.StatusOK
 	v := Valid("LogOut", &status)
 	if err != nil {

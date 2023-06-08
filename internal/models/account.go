@@ -139,7 +139,7 @@ func (Account) MapGenerator() func() map[string]any {
 	}
 }
 
-func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (res *rest.Created, err error) {
+func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
 	var (
 		status uint16 = http.StatusInternalServerError
 
@@ -151,17 +151,15 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 
 	ct := r.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, mux.X_WWW_FORM_URLENCODED) {
-		if err = r.ParseForm(); err != nil {
+		if err := r.ParseForm(); err != nil {
 			status = http.StatusBadRequest
-			res = &rest.Created{
-				Status:  status,
-				Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
-			}
-			err = &mux.HttpError{
-				Body:   err.Error(),
-				Status: status,
-			}
-			return
+			return &rest.Created{
+					Status:  status,
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+				}, &mux.HttpError{
+					Body:   err.Error(),
+					Status: status,
+				}
 		}
 
 		name = r.FormValue("name")
@@ -171,17 +169,15 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}
 		likes = r.Form["likes"]
 	} else if strings.HasPrefix(ct, mux.FORM_DATA) {
-		if err = r.ParseMultipartForm(0x400); err != nil {
+		if err := r.ParseMultipartForm(0x400); err != nil {
 			status = http.StatusBadRequest
-			res = &rest.Created{
-				Status:  status,
-				Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
-			}
-			err = &mux.HttpError{
-				Body:   err.Error(),
-				Status: status,
-			}
-			return
+			return &rest.Created{
+					Status:  status,
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+				}, &mux.HttpError{
+					Body:   err.Error(),
+					Status: status,
+				}
 		}
 
 		name = r.FormValue("name")
@@ -195,26 +191,18 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		h := w.Header()
 		mux.Append(&h, "Accept", mux.X_WWW_FORM_URLENCODED)
 		mux.Append(&h, "Accept", mux.FORM_DATA)
-		res = &rest.Created{
+		return &rest.Created{
 			Status:  status,
 			Message: fmt.Sprintf("request has the usupported media type `%s`", ct),
-		}
-		if err != nil {
-			err = &mux.HttpError{
-				Body:   err.Error(),
-				Status: status,
-			}
-		}
-		return
+		}, nil
 	}
 
 	if l := len(name); l > 80 || l <= 0 {
 		status = http.StatusUnprocessableEntity
-		res = &rest.Created{
+		return &rest.Created{
 			Status:  status,
 			Message: "`name` body field has to have a length between 1 and 80 characters",
-		}
-		return
+		}, nil
 	}
 
 	tk, err := mux.ExtractToken(w, r)
@@ -240,16 +228,12 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}
 
 	claims := &auth.Claims{}
-    claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
+	claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
 	if err != nil {
 		return nil, err
 	}
 	err = json.Unmarshal(claims_str, claims)
 
-    println(1)
-    fmt.Printf("%v\n", claims_str)
-    fmt.Printf("%v\n", claims)
-    fmt.Printf("%v\n", err)
 	if err != nil {
 		return nil, err
 	}
@@ -277,24 +261,22 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}, map[string]any{
 		"credential_id": claims.Payload.Client,
 	})
-    println(2)
 	if err != nil {
 		status = http.StatusInternalServerError
-		err = &mux.HttpError{
+		return nil, &mux.HttpError{
 			Body:   err.Error(),
 			Status: status,
 		}
-		return
 	}
 
-    max := conf.MustGetConfOrDefault(1, "REST", "max")
-    if len(result.Rows) >= max {
-        status = http.StatusForbidden
-        return nil, &mux.HttpError{
-            Body: fmt.Sprintf("the maximum limit of this resource (%d) has reached.", max),
-            Status: status,
-        }
-    }
+	max := conf.MustGetConfOrDefault(1, "REST", "max")
+	if len(result.Rows) >= max {
+		status = http.StatusForbidden
+		return nil, &mux.HttpError{
+			Body:   fmt.Sprintf("the maximum limit of this resource (%d) has reached.", max),
+			Status: status,
+		}
+	}
 
 	result, err = s.DBH.Insert(r.Context(), "account", []map[string]string{
 		{
@@ -304,17 +286,15 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		},
 	})
 
-    println(3)
 	if err != nil {
 		status = http.StatusInternalServerError
-		err = &mux.HttpError{
+		return nil, &mux.HttpError{
 			Body:   err.Error(),
 			Status: status,
 		}
-		return
 	}
 
-	id := strconv.Itoa(int(*res.LastID))
+	id := strconv.Itoa(int(*result.LastID))
 
 	_, err = s.DBH.Insert(r.Context(), "credential_accounts", []map[string]string{
 		{
@@ -323,16 +303,14 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		},
 	})
 
-    println(4)
 	if err != nil {
 		s.DBH.Delete(r.Context(), "account", map[string]any{"id": id})
 
 		status = http.StatusInternalServerError
-		err = &mux.HttpError{
+		return nil, &mux.HttpError{
 			Body:   err.Error(),
 			Status: status,
 		}
-		return
 	}
 
 	likes_inserts := make([]map[string]string, 0, len(likes))
@@ -343,25 +321,21 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		})
 	}
 
-	_, err = s.DBH.Insert(r.Context(), "credential_accounts", likes_inserts)
+	_, err = s.DBH.Insert(r.Context(), "account_likes", likes_inserts)
 
-    println(5)
 	if err != nil {
-		s.DBH.Delete(r.Context(), "account", map[string]any{
-			"id": strconv.Itoa(int(*res.LastID)),
-		})
+		s.DBH.Delete(r.Context(), "account", map[string]any{"id": id})
 
 		s.DBH.Delete(r.Context(), "credential_accounts", map[string]any{
 			"credential_id": claims.Payload.Client,
-			"account_id":    strconv.Itoa(int(*res.LastID)),
+			"account_id":    id,
 		})
 
 		status = http.StatusInternalServerError
-		err = &mux.HttpError{
+		return nil, &mux.HttpError{
 			Body:   err.Error(),
 			Status: status,
 		}
-		return
 	}
 
 	return &rest.Created{

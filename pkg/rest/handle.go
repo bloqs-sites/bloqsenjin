@@ -6,16 +6,29 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 )
 
+type Created struct {
+	LastID  *int64 `json:"id"`
+	Status  uint16 `json:"status"`
+	Message string `json:"message"`
+}
+
+type Resource struct {
+	Models  []db.JSON `json:"models"`
+	Status  uint16    `json:"status"`
+	Message string    `json:"message"`
+}
+
 type CRUDer interface {
-	Create(*http.Request, Server) ([]db.JSON, error)
-	Read(*http.Request, Server) ([]db.JSON, error)
-	Update(*http.Request, Server) ([]db.JSON, error)
-	Delete(*http.Request, Server) ([]db.JSON, error)
+	Create(http.ResponseWriter, *http.Request, RESTServer) (*Created, error)
+	Read(http.ResponseWriter, *http.Request, RESTServer) (*Resource, error)
+	Update(http.ResponseWriter, *http.Request, RESTServer) (*Resource, error)
+	Delete(http.ResponseWriter, *http.Request, RESTServer) (*Resource, error)
 }
 
 type Handler interface {
-	Handle(*http.Request, Server) ([]db.JSON, error)
+	Handle(http.ResponseWriter, *http.Request, RESTServer) error
 
 	CRUDer
 	db.Mapper
+	Table() string
 }

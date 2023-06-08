@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
@@ -180,9 +181,60 @@ func (s *AuthServer) LogOut(ctx context.Context, in *proto.Token) (*proto.Valida
 	return v, err
 }
 
-func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
-	valid, _ := s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions))
+func (s *AuthServer) IsSuper(ctx context.Context, in *proto.Credentials) (v *proto.Validation, err error) {
+	var (
+		status uint32
+		super  bool
+	)
+
+	switch x := in.Credentials.(type) {
+	case *proto.Credentials_Basic:
+		err = s.auther.CheckAccessBasic(ctx, x)
+		if err != nil {
+			status = http.StatusInternalServerError
+			if err, ok := err.(*mux.HttpError); ok {
+				status = uint32(err.Status)
+			}
+
+			return ErrorToValidation(err, &status), err
+		}
+		super, err = s.auther.IsSuperBasic(ctx, x)
+		if err != nil {
+			status = http.StatusInternalServerError
+			if err, ok := err.(*mux.HttpError); ok {
+				status = uint32(err.Status)
+			}
+
+			return ErrorToValidation(err, &status), err
+		}
+	case nil:
+		status = http.StatusBadRequest
+		v = Invalid("Did not recieve Credentials.", &status)
+		err = errors.New("credentials cannot be nil")
+		return
+	default:
+		status = http.StatusBadRequest
+		v = Invalid("Recieved forbidden on unsupported Credentials.", &status)
+		err = fmt.Errorf("credentials has unexpected type %T", x)
+		return
+	}
+
 	return &proto.Validation{
-		Valid: valid,
+		Valid: super,
 	}, nil
+}
+
+func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
+	valid, err := s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions))
+	if valid {
+		return &proto.Validation{
+			Valid: valid,
+		}, err
+	}
+
+	msg := fmt.Sprintf("The token provided does not have the `%s` permission.", strconv.Itoa(int(*in.Permissions)))
+	return &proto.Validation{
+		Valid:   valid,
+		Message: &msg,
+	}, err
 }

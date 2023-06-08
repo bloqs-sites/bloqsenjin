@@ -87,11 +87,17 @@ func CheckOriginHeader(h *http.Header, r *http.Request) (uint32, error) {
 	uri, err := url.ParseRequestURI(o)
 
 	if err != nil {
-		return http.StatusForbidden, fmt.Errorf("the `Origin` HTTP header has unparsable value `%s`:\t%s", o, err)
+		return http.StatusForbidden, &bloqs_http.HttpError{
+			Body:   fmt.Sprintf("the `Origin` HTTP header has unparsable value `%s`:\t%s", o, err),
+			Status: http.StatusForbidden,
+		}
 	}
 
 	if err := ValidateDomain(uri.Hostname()); err != nil {
-		return http.StatusForbidden, fmt.Errorf("the `Origin` HTTP header its forbidden:\t%s", err)
+		return http.StatusForbidden, &bloqs_http.HttpError{
+			Body:   fmt.Sprintf("the `Origin` HTTP header its forbidden:\t%s", err),
+			Status: http.StatusForbidden,
+		}
 	} else {
 		if GetDomainsType() == DOMAINS_WHITELIST {
 			h.Set("Access-Control-Allow-Origin", uri.String())

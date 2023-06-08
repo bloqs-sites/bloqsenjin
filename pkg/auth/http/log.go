@@ -43,6 +43,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var ask *proto.AskPermissions
+		var creds *proto.Credentials
 
 		ct := r.Header.Get("Content-Type")
 		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
@@ -98,27 +99,8 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			}
 			goto respond
 		}
-		perm := conf.MustGetConfOrDefault("permissions", "auth", "permissionsQueryParam")
 
 		method := r.URL.Query().Get(t)
-		permissions := auth.DEFAULT_PERMISSIONS
-		if r.URL.Query().Has(perm) {
-			ps, ok := r.URL.Query()[perm]
-			if ok {
-				permissions = bloqs_auth.NIL
-				for _, i := range ps {
-					p, ok := auth.Permissions[i]
-					if !ok {
-						status = http.StatusBadRequest
-						v = &proto.TokenValidation{
-							Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the permissions for the token to have was has an invalid value. Check which values are supported (.%s).\n", perm, "TODO"), &status),
-						}
-						goto respond
-					}
-					permissions |= p
-				}
-			}
-		}
 
 		switch method {
 		case "basic":
@@ -151,16 +133,13 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 					goto respond
 				}
 
-				ask = &proto.AskPermissions{
-					Credentials: &proto.Credentials{
-						Credentials: &proto.Credentials_Basic{
-							Basic: &proto.Credentials_BasicCredentials{
-								Email:    email,
-								Password: pass,
-							},
+				creds = &proto.Credentials{
+					Credentials: &proto.Credentials_Basic{
+						Basic: &proto.Credentials_BasicCredentials{
+							Email:    email,
+							Password: pass,
 						},
 					},
-					Permissions: uint64(permissions),
 				}
 			}
 		default:
@@ -178,6 +157,50 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				Validation: bloqs_auth.ErrorToValidation(err, &status),
 			}
 			goto respond
+		}
+
+		var validation *proto.Validation
+
+		if ask != nil && creds == nil {
+			creds = ask.Credentials
+		}
+
+		validation, err = a.IsSuper(r.Context(), creds)
+
+		if ask == nil {
+			perm := conf.MustGetConfOrDefault("permissions", "auth", "permissionsQueryParam")
+			permissions := auth.DEFAULT_PERMISSIONS
+			list := make(map[string]bloqs_auth.Permissions, len(auth.Permissions))
+			for k, v := range auth.Permissions {
+				list[k] = v
+			}
+			if validation.Valid {
+				for k, v := range auth.SuperPermissions {
+					list[k] = v
+				}
+			}
+			if r.URL.Query().Has(perm) {
+				ps, ok := r.URL.Query()[perm]
+				if ok {
+					permissions = bloqs_auth.NIL
+					for _, i := range ps {
+						p, ok := list[i]
+						if !ok {
+							status = http.StatusBadRequest
+							v = &proto.TokenValidation{
+								Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the permissions for the token to have was has an invalid value. Check which values are supported (.%s).\n", perm, "TODO"), &status),
+							}
+							goto respond
+						}
+						permissions |= p
+					}
+				}
+			}
+
+			ask = &proto.AskPermissions{
+				Credentials: creds,
+				Permissions: uint64(permissions),
+			}
 		}
 
 		v, err = a.LogIn(r.Context(), ask)

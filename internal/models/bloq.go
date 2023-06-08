@@ -1,15 +1,10 @@
 package models
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
-	"time"
 
-	"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
@@ -17,185 +12,189 @@ import (
 type BloqHandler struct {
 }
 
-func (h *BloqHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) {
-	if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
-		return nil, fmt.Errorf("no permissions")
-	}
-
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
-		return nil, err
-	}
-
-	bloqrow := make(map[string]string)
-
-	bloqrow["name"] = r.MultipartForm.Value["name"][0]
-
-	if len(bloqrow["name"]) > 80 {
-		return nil, fmt.Errorf("bloq name provided is too big")
-	}
-
-	bloqrow["description"] = r.MultipartForm.Value["description"][0]
-
-	if len(bloqrow["description"]) > 140 {
-		return nil, fmt.Errorf("bloq description provided is too big")
-	}
-
-	bloqrow["category"] = r.MultipartForm.Value["category"][0]
-
-	if _, err := strconv.ParseUint(bloqrow["category"], 10, 0); err != nil {
-		return nil, fmt.Errorf("category ID `%s` is invalid", bloqrow["category"])
-	}
-
-	bloqrow["hasAdultConsideration"] = r.MultipartForm.Value["hasAdultConsideration"][0]
-
-	p18, err := strconv.ParseBool(bloqrow["hasAdultConsideration"])
-
-	if err != nil {
-		p18 = false
-	}
-
-	if p18 {
-		bloqrow["hasAdultConsideration"] = "1"
-	} else {
-		bloqrow["hasAdultConsideration"] = "0"
-	}
-
-	dbh := *s.GetDB()
-
-	res, err := dbh.Insert(r.Context(), "bloq", []map[string]string{bloqrow})
-
-	if err != nil || res.LastID == nil {
-		return nil, fmt.Errorf("internal error")
-	}
-
-	bloqirow := make(map[string]string)
-
-	bloqirow["bloq"] = strconv.FormatInt(*res.LastID, 10)
-
-	if len(r.MultipartForm.File["image"]) > 0 {
-		img := r.MultipartForm.File["image"][0]
-
-		if !strings.HasPrefix(img.Header.Get("Content-Type"), "image/") {
-			return nil, fmt.Errorf("file provided has not a Content-Type image/*")
-		}
-
-		if img.Size > (32 << 20) {
-			return nil, fmt.Errorf("image to big")
-		}
-
-		bloqirow["image"] = img.Filename
-	}
-
-	bloqirow["changeTimestamp"] = strconv.FormatInt(time.Now().Unix(), 10)
-
-	dbh.Insert(r.Context(), "bloq_image", []map[string]string{bloqirow})
-
-	bloqkrow := make(map[string]string)
-
-	bloqkrow["bloq"] = strconv.FormatInt(*res.LastID, 10)
-
-	for _, k := range r.MultipartForm.Value["keyword"] {
-		bloqkrow["keyword"] = k
-		dbh.Insert(r.Context(), "bloq_keyword", []map[string]string{bloqkrow})
-	}
-
-	/* Saves image somewhere like Cloudflare R2, IPFS, idk */
-
-	return res.Rows, nil
-}
-
-func (h *BloqHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, error) {
-	dbh := *s.GetDB()
-
-	parts := strings.Split(r.URL.Path, "/")
-
-	if len(parts) > 2 && len(parts[2]) > 0 {
-		id, err := strconv.ParseInt(parts[2], 10, 0)
-
-		if err != nil {
-			return nil, err
-		}
-
-		res, err := dbh.Select(r.Context(), "bloq_basic", h.MapGenerator(), nil)
-		if err != nil {
-			return nil, err
-		}
-
-		rows := res.Rows
-		rn := len(rows)
-
-		if rn < 1 {
-			return rows, nil
-		}
-
-		json := make([]db.JSON, 1)
-
-		for _, v := range rows {
-			i, ok := v["id"]
-
-			if !ok {
-				continue
-			}
-
-			j, ok := i.(*int64)
-
-			if ok && *j == id {
-				v["@context"] = "https://schema.org/"
-				v["@type"] = "Product"
-				json[0] = v
-				return json, nil
-			}
-		}
-
-		return json, nil
-	}
-
-	res, err := dbh.Select(context.Background(), "bloq_basic", h.MapGenerator(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	rows := res.Rows
-	rn := len(rows)
-
-	if rn < 1 {
-		return rows, nil
-	}
-
-	json, i := make([]db.JSON, len(rows)+1), 0
-
-	json[i] = db.JSON{
-		"@context": "https://schema.org/",
-	}
-
-	for _, v := range rows {
-		v["@type"] = "Product"
-
-		i++
-		json[i] = v
-	}
-
-	return json, nil
-}
-
-func (h *BloqHandler) Update(*http.Request, rest.Server) ([]db.JSON, error) {
+func (h *BloqHandler) Create(r *http.Request) ([]db.JSON, error) {
+	//	if !s.ValidateJWT(r, uint64(auth.CREATE_BLOQ)) {
+	//		return nil, fmt.Errorf("no permissions")
+	//	}
+	//
+	//	if err := r.ParseMultipartForm(64 << 20); err != nil {
+	//		return nil, err
+	//	}
+	//
+	// bloqrow := make(map[string]string)
+	//
+	// bloqrow["name"] = r.MultipartForm.Value["name"][0]
+	//
+	//	if len(bloqrow["name"]) > 80 {
+	//		return nil, fmt.Errorf("bloq name provided is too big")
+	//	}
+	//
+	// bloqrow["description"] = r.MultipartForm.Value["description"][0]
+	//
+	//	if len(bloqrow["description"]) > 140 {
+	//		return nil, fmt.Errorf("bloq description provided is too big")
+	//	}
+	//
+	// bloqrow["category"] = r.MultipartForm.Value["category"][0]
+	//
+	//	if _, err := strconv.ParseUint(bloqrow["category"], 10, 0); err != nil {
+	//		return nil, fmt.Errorf("category ID `%s` is invalid", bloqrow["category"])
+	//	}
+	//
+	// bloqrow["hasAdultConsideration"] = r.MultipartForm.Value["hasAdultConsideration"][0]
+	//
+	// p18, err := strconv.ParseBool(bloqrow["hasAdultConsideration"])
+	//
+	//	if err != nil {
+	//		p18 = false
+	//	}
+	//
+	//	if p18 {
+	//		bloqrow["hasAdultConsideration"] = "1"
+	//	} else {
+	//
+	//		bloqrow["hasAdultConsideration"] = "0"
+	//	}
+	//
+	// dbh := *s.GetDB()
+	//
+	// res, err := dbh.Insert(r.Context(), "bloq", []map[string]string{bloqrow})
+	//
+	//	if err != nil || res.LastID == nil {
+	//		return nil, fmt.Errorf("internal error")
+	//	}
+	//
+	// bloqirow := make(map[string]string)
+	//
+	// bloqirow["bloq"] = strconv.FormatInt(*res.LastID, 10)
+	//
+	//	if len(r.MultipartForm.File["image"]) > 0 {
+	//		img := r.MultipartForm.File["image"][0]
+	//
+	//		if !strings.HasPrefix(img.Header.Get("Content-Type"), "image/") {
+	//			return nil, fmt.Errorf("file provided has not a Content-Type image/*")
+	//		}
+	//
+	//		if img.Size > (32 << 20) {
+	//			return nil, fmt.Errorf("image to big")
+	//		}
+	//
+	//		bloqirow["image"] = img.Filename
+	//	}
+	//
+	// bloqirow["changeTimestamp"] = strconv.FormatInt(time.Now().Unix(), 10)
+	//
+	// dbh.Insert(r.Context(), "bloq_image", []map[string]string{bloqirow})
+	//
+	// bloqkrow := make(map[string]string)
+	//
+	// bloqkrow["bloq"] = strconv.FormatInt(*res.LastID, 10)
+	//
+	//	for _, k := range r.MultipartForm.Value["keyword"] {
+	//		bloqkrow["keyword"] = k
+	//		dbh.Insert(r.Context(), "bloq_keyword", []map[string]string{bloqkrow})
+	//	}
+	//
+	// /* Saves image somewhere like Cloudflare R2, IPFS, idk */
+	//
+	// return res.Rows, nil
 	return nil, nil
 }
 
-func (h *BloqHandler) Delete(*http.Request, rest.Server) ([]db.JSON, error) {
+func (h *BloqHandler) Read(r *http.Request, s rest.RESTServer) ([]db.JSON, error) {
+	// dbh := *s.GetDB()
+	//
+	// parts := strings.Split(r.URL.Path, "/")
+	//
+	//	if len(parts) > 2 && len(parts[2]) > 0 {
+	//		id, err := strconv.ParseInt(parts[2], 10, 0)
+	//
+	//		if err != nil {
+	//			return nil, err
+	//		}
+	//
+	//		res, err := dbh.Select(r.Context(), "bloq_basic", h.MapGenerator(), nil)
+	//		if err != nil {
+	//			return nil, err
+	//		}
+	//
+	//		rows := res.Rows
+	//		rn := len(rows)
+	//
+	//		if rn < 1 {
+	//			return rows, nil
+	//		}
+	//
+	//		json := make([]db.JSON, 1)
+	//
+	//		for _, v := range rows {
+	//			i, ok := v["id"]
+	//
+	//			if !ok {
+	//				continue
+	//			}
+	//
+	//			j, ok := i.(*int64)
+	//
+	//			if ok && *j == id {
+	//				v["@context"] = "https://schema.org/"
+	//				v["@type"] = "Product"
+	//				json[0] = v
+	//				return json, nil
+	//			}
+	//		}
+	//
+	//		return json, nil
+	//	}
+	//
+	// res, err := dbh.Select(context.Background(), "bloq_basic", h.MapGenerator(), nil)
+	//
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	// rows := res.Rows
+	// rn := len(rows)
+	//
+	//	if rn < 1 {
+	//		return rows, nil
+	//	}
+	//
+	// json, i := make([]db.JSON, len(rows)+1), 0
+	//
+	//	json[i] = db.JSON{
+	//		"@context": "https://schema.org/",
+	//	}
+	//
+	//	for _, v := range rows {
+	//		v["@type"] = "Product"
+	//
+	//		i++
+	//		json[i] = v
+	//	}
+	//
+	// return json, nil
 	return nil, nil
 }
 
-func (h *BloqHandler) Handle(r *http.Request, s rest.Server) ([]db.JSON, error) {
-	switch r.Method {
-	case "":
-		fallthrough
-	case http.MethodGet:
-		return h.Read(r, s)
-	case http.MethodPost:
-		return h.Create(r, s)
-	}
+func (h *BloqHandler) Update(*http.Request, rest.RESTServer) ([]db.JSON, error) {
+	return nil, nil
+}
 
+func (h *BloqHandler) Delete(*http.Request, rest.RESTServer) ([]db.JSON, error) {
+	return nil, nil
+}
+
+func (h *BloqHandler) Handle(r *http.Request, s rest.RESTServer) ([]db.JSON, error) {
+	//	switch r.Method {
+	//	case "":
+	//		fallthrough
+	//	case http.MethodGet:
+	//		return h.Read(r, s)
+	//	case http.MethodPost:
+	//		return h.Create(r, s)
+	//	}
+	//
 	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))
 }
 

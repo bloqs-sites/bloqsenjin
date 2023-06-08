@@ -1,38 +1,171 @@
 package models
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/bloqs-sites/bloqsenjin/internal/auth"
+	internal_db "github.com/bloqs-sites/bloqsenjin/internal/db"
+	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
+	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
+	"github.com/bloqs-sites/bloqsenjin/proto"
+	"github.com/redis/go-redis/v9"
 )
 
 type PreferenceHandler struct {
 }
 
-func (p PreferenceHandler) Create(r *http.Request, s rest.Server) ([]db.JSON, error) {
-	if err := r.ParseMultipartForm(1024); err != nil {
+func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (res *rest.Created, err error) {
+	var (
+		status uint16 = http.StatusInternalServerError
+
+		name        string
+		description string
+	)
+
+	ct := r.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, mux.X_WWW_FORM_URLENCODED) {
+		if err = r.ParseForm(); err != nil {
+			status = http.StatusBadRequest
+			res = &rest.Created{
+				Status:  status,
+				Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+			}
+			err = &mux.HttpError{
+				Body:   err.Error(),
+				Status: status,
+			}
+			return
+		}
+
+		name = r.FormValue("name")
+		description = r.FormValue("description")
+	} else if strings.HasPrefix(ct, mux.FORM_DATA) {
+		if err = r.ParseMultipartForm(0x400); err != nil {
+			status = http.StatusBadRequest
+			res = &rest.Created{
+				Status:  status,
+				Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+			}
+			err = &mux.HttpError{
+				Body:   err.Error(),
+				Status: status,
+			}
+			return
+		}
+
+		name = r.FormValue("name")
+		description = r.FormValue("description")
+	} else {
+		status = http.StatusUnsupportedMediaType
+		h := w.Header()
+		mux.Append(&h, "Accept", mux.X_WWW_FORM_URLENCODED)
+		mux.Append(&h, "Accept", mux.FORM_DATA)
+		res = &rest.Created{
+			Status:  status,
+			Message: fmt.Sprintf("request has the usupported media type `%s`", ct),
+		}
+		if err != nil {
+			err = &mux.HttpError{
+				Body:   err.Error(),
+				Status: status,
+			}
+		}
+		return
+	}
+
+	if l := len(name); l > 80 || l <= 0 {
+		status = http.StatusUnprocessableEntity
+		res = &rest.Created{
+			Status:  status,
+			Message: "`name` body field has to have a length between 1 and 80 characters",
+		}
+		return
+	}
+
+	if l := len(description); l > 140 {
+		status = http.StatusUnprocessableEntity
+		res = &rest.Created{
+			Status:  status,
+			Message: "`description` body field has to have a length with a maximum of 140 characters",
+		}
+		return
+	}
+
+	a, err := authSrv(r.Context())
+
+	if err != nil {
 		return nil, err
 	}
 
-	dbh := *s.GetDB()
+	tk, err := mux.ExtractToken(w, r)
 
-	dbh.Insert(r.Context(), "preference", []map[string]string{
+	if err != nil {
+		return nil, err
+	}
+
+	permission := auth.CREATE_PREFERENCE
+	v, err := a.Validate(r.Context(), &proto.Token{
+		Jwt:         string(tk),
+		Permissions: (*uint64)(&permission),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !v.Valid {
+		msg := ""
+
+		if v.Message != nil {
+			msg = *v.Message
+		}
+
+		if v.HttpStatusCode != nil {
+			status = uint16(*v.HttpStatusCode)
+		}
+
+		return nil, &mux.HttpError{
+			Body:   msg,
+			Status: status,
+		}
+	}
+
+	var result db.Result
+	result, err = s.DBH.Insert(r.Context(), "preference", []map[string]string{
 		{
-			"name":        r.FormValue("name"),
-			"description": r.FormValue("description"),
+			"name":        name,
+			"description": description,
 		},
 	})
 
-	return nil, nil
+	if err != nil {
+		status = http.StatusInternalServerError
+		err = &mux.HttpError{
+			Body:   err.Error(),
+			Status: status,
+		}
+		return
+	}
+
+	return &rest.Created{
+		LastID:  result.LastID,
+		Message: "",
+		Status:  http.StatusCreated,
+	}, nil
 }
 
-func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, error) {
-	dbh := *s.GetDB()
+func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+	dbh := s.DBH
 
 	parts := strings.Split(r.URL.Path, "/")
 
@@ -52,7 +185,8 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, erro
 		rn := len(rows)
 
 		if rn < 1 {
-			return rows, nil
+			//return rows, nil
+			return nil, nil
 		}
 
 		json := make([]db.JSON, 1)
@@ -70,11 +204,13 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, erro
 				v["@context"] = "https://schema.org/"
 				v["@type"] = "CategoryCode"
 				json[0] = v
-				return json, nil
+				//return json, nil
+				return nil, nil
 			}
 		}
 
-		return json, nil
+		//return json, nil
+		return nil, nil
 	}
 
 	res, err := dbh.Select(r.Context(), "preference", p.MapGenerator(), nil)
@@ -86,7 +222,8 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, erro
 	rn := len(rows)
 
 	if rn < 1 {
-		return rows, nil
+		//return rows, nil
+		return nil, nil
 	}
 
 	json, i := make([]db.JSON, len(rows)+1), 0
@@ -102,28 +239,111 @@ func (p PreferenceHandler) Read(r *http.Request, s rest.Server) ([]db.JSON, erro
 		json[i] = v
 	}
 
-	return json, nil
-}
-
-func (p PreferenceHandler) Update(*http.Request, rest.Server) ([]db.JSON, error) {
+	//return json, nil
 	return nil, nil
 }
 
-func (p PreferenceHandler) Delete(*http.Request, rest.Server) ([]db.JSON, error) {
+func (p PreferenceHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
 	return nil, nil
 }
 
-func (p PreferenceHandler) Handle(r *http.Request, s rest.Server) ([]db.JSON, error) {
+func (p PreferenceHandler) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+	return nil, nil
+}
+
+func (p PreferenceHandler) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServer) error {
+	var (
+		status uint32
+
+		err error
+	)
+
+	h := w.Header()
+	_, err = helpers.CheckOriginHeader(&h, r)
+
 	switch r.Method {
 	case "":
 		fallthrough
 	case http.MethodGet:
-		return p.Read(r, s)
+		if err != nil {
+			return err
+		}
+
+		redirect, err := p.Read(w, r, s)
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("redirect.Message: %v\n", redirect.Message)
+
+		//w.Header().Set("Content-Type", "application/json")
+
+		//if models := res.Models; len(models) == 0 {
+		//	_, err = w.Write([]byte("{}"))
+		//} else if len(models) == 1 {
+		//	err = json.NewEncoder(w).Encode(models[0])
+		//} else {
+		//	err = json.NewEncoder(w).Encode(models)
+		//}
+
+		//if err != nil {
+		//	w.WriteHeader(http.StatusInternalServerError)
+		//	fmt.Fprintf(w, "%s", err.Error())
+		//}
 	case http.MethodPost:
-		return p.Create(r, s)
+		if err != nil {
+			return err
+		}
+
+		created, err := p.Create(w, r, s)
+
+		if err != nil {
+			return err
+		}
+
+		if created == nil {
+			return &mux.HttpError{
+				Status: http.StatusInternalServerError,
+			}
+		}
+
+		var id *string = nil
+
+		domain := conf.MustGetConf("REST", "domain").(string)
+
+		if created.LastID != nil {
+			id_str := strconv.Itoa(int(*created.LastID))
+			id = &id_str
+		}
+
+		if id != nil {
+			w.Header().Set("Location", fmt.Sprintf("%s/%s/%s", domain, p.Table(), *id))
+		}
+		if w.Header().Get("Content-Type") == "" {
+			w.Header().Set("Content-Type", "text/plain")
+		}
+		w.WriteHeader(int(created.Status))
+		w.Write([]byte(created.Message))
+
+		return nil
+	case http.MethodOptions:
+		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
+		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
+		h.Set("Access-Control-Allow-Credentials", "true")
+		mux.Append(&h, "Access-Control-Allow-Headers", "Authorization")
+		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
+		h.Set("Access-Control-Max-Age", "0")
+		return err
+	default:
+		status = http.StatusMethodNotAllowed
+		return &mux.HttpError{
+			Body:   "",
+			Status: uint16(status),
+		}
 	}
 
-	return nil, errors.New(fmt.Sprint(http.StatusMethodNotAllowed))
+	return errors.New("")
 }
 
 func (p PreferenceHandler) CreateTable() []db.Table {
@@ -157,4 +377,35 @@ func (p PreferenceHandler) MapGenerator() func() map[string]any {
 		m["name"] = new(string)
 		return m
 	}
+}
+
+func (p PreferenceHandler) Table() string {
+	return "preference"
+}
+
+func authSrv(ctx context.Context) (proto.AuthServer, error) {
+	// TODO: How can I make it that you can specify which implementation of the interfaces you want to use?
+	creds, err := internal_db.NewMySQL(ctx, strings.TrimSpace(os.Getenv("BLOQS_AUTH_MYSQL_DSN")))
+	if err != nil {
+		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", creds, err)
+	}
+
+	opt, err := redis.ParseURL(strings.TrimSpace(os.Getenv("BLOQS_TOKENS_REDIS_DSN")))
+	if err != nil {
+		return nil, fmt.Errorf("could not parse the `BLOQS_TOKENS_REDIS_DSN` to create the credentials to connect to the DB:\t%s", err)
+	}
+
+	a, err := auth.NewBloqsAuther(ctx, creds)
+	if err != nil {
+		return nil, err
+	}
+
+	secrets, err := internal_db.NewKeyDB(ctx, opt)
+	if err != nil {
+		return nil, fmt.Errorf("error creating DB instance of type `%T`:\t%s", secrets, err)
+	}
+
+	t := auth.NewBloqsTokener(secrets)
+
+	return bloqs_auth.NewAuthServer(a, t), nil
 }

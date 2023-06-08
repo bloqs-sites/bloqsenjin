@@ -18,7 +18,7 @@ const (
 	//JWT_COOKIE = "__Host-bloqs-auth"
 	JWT_COOKIE = "_Secure-bloqs-auth"
 
-	BEARER_PREFIX = "Bearer "
+	BEARER_PREFIX = "Bearer"
 )
 
 func GetQuery() string {
@@ -46,15 +46,26 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error
 	var cookie *http.Cookie
 	cookie, err = r.Cookie(JWT_COOKIE)
 	if err == http.ErrNoCookie {
+		err = nil
 		header := r.Header.Get("Authorization")
 
-		if !strings.HasPrefix(header, BEARER_PREFIX) {
-			err = &HttpError{Body: "", Status: http.StatusUnauthorized}
-			return
+		if header == "" {
+			return nil, &HttpError{
+				Body:   fmt.Sprintf("HTTP Cookie `%s` and/or `Authorization` HTTP Header is missing", JWT_COOKIE),
+				Status: http.StatusUnauthorized,
+			}
 		}
 
-		jwt = []byte(header[len(BEARER_PREFIX):])
-		return
+		bearerToken := strings.Split(header, " ")
+
+		if len(bearerToken) != 2 || bearerToken[0] != BEARER_PREFIX {
+			return nil, &HttpError{
+				Body:   "`Authorization` HTTP Header does not have a Bearer token",
+				Status: http.StatusUnauthorized,
+			}
+		}
+
+		return []byte(bearerToken[1]), nil
 	} else if err != nil {
 		err = &HttpError{Body: "", Status: http.StatusInternalServerError}
 		return

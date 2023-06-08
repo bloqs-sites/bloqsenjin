@@ -119,11 +119,12 @@ func (t *BloqsTokener) RevokeToken(ctx context.Context, tk auth.Token) error {
 }
 
 func (t *BloqsTokener) parseToken(ctx context.Context, tk auth.Token) (*jwt.Token, error) {
+	auth_api := conf.MustGetConf("auth", "domain").(string)
 	return jwt.ParseWithClaims(string(tk), &claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
 		"HS256",
 		"HS384",
 		"HS512",
-	}), jwt.WithJSONNumber(), jwt.WithIssuer("bloqsenjin"), jwt.WithLeeway(5*time.Second))
+	}), jwt.WithJSONNumber(), jwt.WithIssuer(auth_api), jwt.WithLeeway(5*time.Second))
 }
 
 func (t *BloqsTokener) keyfunc(ctx context.Context) jwt.Keyfunc {

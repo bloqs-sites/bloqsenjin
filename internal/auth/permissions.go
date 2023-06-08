@@ -17,11 +17,14 @@ const (
 )
 
 var Permissions = map[string]auth.Permissions{
+	"create_bloq": CREATE_BLOQ,
+	"update_bloq": UPDATE_BLOQ,
+	"delete_bloq": DELETE_BLOQ,
+	"default":     DEFAULT_PERMISSIONS,
+}
+
+var SuperPermissions = map[string]auth.Permissions{
 	"create_preference": CREATE_PREFERENCE,
 	"update_preference": UPDATE_PREFERENCE,
 	"delete_preference": DELETE_PREFERENCE,
-	"create_bloq":       CREATE_BLOQ,
-	"update_bloq":       UPDATE_BLOQ,
-	"delete_bloq":       DELETE_BLOQ,
-	"default":           DEFAULT_PERMISSIONS,
 }

@@ -26,6 +26,7 @@ type AuthClient interface {
 	SignOut(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error)
 	LogIn(ctx context.Context, in *AskPermissions, opts ...grpc.CallOption) (*TokenValidation, error)
 	LogOut(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error)
+	IsSuper(ctx context.Context, in *Credentials, opts ...grpc.CallOption) (*Validation, error)
 	GrantSuper(ctx context.Context, in *CredentialsWithToken, opts ...grpc.CallOption) (*Validation, error)
 	RevokeSuper(ctx context.Context, in *CredentialsWithToken, opts ...grpc.CallOption) (*Validation, error)
 	Validate(ctx context.Context, in *Token, opts ...grpc.CallOption) (*Validation, error)
@@ -75,6 +76,15 @@ func (c *authClient) LogOut(ctx context.Context, in *Token, opts ...grpc.CallOpt
 	return out, nil
 }
 
+func (c *authClient) IsSuper(ctx context.Context, in *Credentials, opts ...grpc.CallOption) (*Validation, error) {
+	out := new(Validation)
+	err := c.cc.Invoke(ctx, "/bloqs.auth.Auth/IsSuper", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authClient) GrantSuper(ctx context.Context, in *CredentialsWithToken, opts ...grpc.CallOption) (*Validation, error) {
 	out := new(Validation)
 	err := c.cc.Invoke(ctx, "/bloqs.auth.Auth/GrantSuper", in, out, opts...)
@@ -110,6 +120,7 @@ type AuthServer interface {
 	SignOut(context.Context, *Token) (*Validation, error)
 	LogIn(context.Context, *AskPermissions) (*TokenValidation, error)
 	LogOut(context.Context, *Token) (*Validation, error)
+	IsSuper(context.Context, *Credentials) (*Validation, error)
 	GrantSuper(context.Context, *CredentialsWithToken) (*Validation, error)
 	RevokeSuper(context.Context, *CredentialsWithToken) (*Validation, error)
 	Validate(context.Context, *Token) (*Validation, error)
@@ -131,6 +142,9 @@ func (UnimplementedAuthServer) LogIn(context.Context, *AskPermissions) (*TokenVa
 }
 func (UnimplementedAuthServer) LogOut(context.Context, *Token) (*Validation, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LogOut not implemented")
+}
+func (UnimplementedAuthServer) IsSuper(context.Context, *Credentials) (*Validation, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsSuper not implemented")
 }
 func (UnimplementedAuthServer) GrantSuper(context.Context, *CredentialsWithToken) (*Validation, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GrantSuper not implemented")
@@ -226,6 +240,24 @@ func _Auth_LogOut_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Auth_IsSuper_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Credentials)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServer).IsSuper(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/bloqs.auth.Auth/IsSuper",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServer).IsSuper(ctx, req.(*Credentials))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Auth_GrantSuper_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CredentialsWithToken)
 	if err := dec(in); err != nil {
@@ -302,6 +334,10 @@ var Auth_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LogOut",
 			Handler:    _Auth_LogOut_Handler,
+		},
+		{
+			MethodName: "IsSuper",
+			Handler:    _Auth_IsSuper_Handler,
 		},
 		{
 			MethodName: "GrantSuper",

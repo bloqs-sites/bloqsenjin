@@ -21,9 +21,9 @@ const (
 )
 
 type Payload struct {
-	Client      string
-	Permissions Permissions
-	Super       bool
+	Client      string      `json:"client"`
+	Permissions Permissions `json:"permissions"`
+	Super       bool        `json:"is_super"`
 }
 
 type Tokener interface {

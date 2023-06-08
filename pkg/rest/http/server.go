@@ -26,6 +26,7 @@ func Server(ctx context.Context) http.HandlerFunc {
 	s := rest.NewRESTServer(dbh)
 
 	s.AttachHandler(context.Background(), "/preference", new(models.PreferenceHandler))
+	s.AttachHandler(context.Background(), "/account", new(models.Account))
 	//s.AttachHandler(context.Background(), "bloq", new(models.BloqHandler))
 
 	return s.Serve()

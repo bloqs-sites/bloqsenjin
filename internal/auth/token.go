@@ -52,7 +52,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 	var (
 		str      string
 		auth_api = conf.MustGetConfOrDefault("", "auth", "domain")
-		token    = jwt.NewWithClaims(jwt.SigningMethodHS512, claims{
+		token    = jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{
 			*p,
 			jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * time.Minute)),
@@ -73,13 +73,13 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 }
 
 func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Permissions) (bool, error) {
-	token, err := t.parseToken(ctx, tk)
+	token, err := t.ParseToken(ctx, tk)
 
 	if err != nil {
 		return false, err
 	}
 
-	if claims, ok := token.Claims.(*claims); ok && token.Valid {
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return (claims.Payload.Permissions & p) == p, nil
 	} else {
 		if errors.Is(err, jwt.ErrTokenMalformed) {
@@ -95,13 +95,13 @@ func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Pe
 }
 
 func (t *BloqsTokener) RevokeToken(ctx context.Context, tk auth.Token) error {
-	token, err := t.parseToken(ctx, tk)
+	token, err := t.ParseToken(ctx, tk)
 
 	if err != nil {
 		return err
 	}
 
-	if claims, ok := token.Claims.(*claims); ok && token.Valid {
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		sub := claims.Subject
 		key := fmt.Sprintf(jwt_prefix, sub)
 		return t.secrets.Delete(ctx, key)
@@ -118,9 +118,9 @@ func (t *BloqsTokener) RevokeToken(ctx context.Context, tk auth.Token) error {
 	}
 }
 
-func (t *BloqsTokener) parseToken(ctx context.Context, tk auth.Token) (*jwt.Token, error) {
+func (t *BloqsTokener) ParseToken(ctx context.Context, tk auth.Token) (*jwt.Token, error) {
 	auth_api := conf.MustGetConf("auth", "domain").(string)
-	return jwt.ParseWithClaims(string(tk), &claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
+	return jwt.ParseWithClaims(string(tk), &Claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
 		"HS256",
 		"HS384",
 		"HS512",

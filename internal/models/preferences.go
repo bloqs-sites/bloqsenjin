@@ -157,6 +157,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		return
 	}
 
+
 	return &rest.Created{
 		LastID:  result.LastID,
 		Message: "",

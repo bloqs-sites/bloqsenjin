@@ -9,6 +9,8 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	rest "github.com/bloqs-sites/bloqsenjin/pkg/rest/http"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func REST(w http.ResponseWriter, r *http.Request) {

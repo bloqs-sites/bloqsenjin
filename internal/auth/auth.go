@@ -24,7 +24,7 @@ const (
 	failed_table  = "failed"
 )
 
-type claims struct {
+type Claims struct {
 	auth.Payload
 	jwt.RegisteredClaims
 }
@@ -145,11 +145,9 @@ func (a *BloqsAuther) SignOutBasic(ctx context.Context, c *proto.Credentials_Bas
 		return err
 	}
 
-	if _, err := a.creds.Delete(ctx, table, []map[string]any{
-		{
-			"identifier": c.Basic.Email,
-			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
-		},
+	if err := a.creds.Delete(ctx, table, map[string]any{
+		"identifier": c.Basic.Email,
+		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
 	}); err != nil {
 		return err
 	}
@@ -180,7 +178,7 @@ func (a *BloqsAuther) super(ctx context.Context, creds *proto.Credentials, super
 			}
 		}
 
-		_, err = a.creds.Update(ctx, table, map[string]any{
+		err = a.creds.Update(ctx, table, map[string]any{
 			"is_super": super,
 		}, map[string]any{
 			"identifier": x.Basic.Email,

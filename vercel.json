@@ -1,4 +1,14 @@
 {
     "$schema": "https://openapi.vercel.sh/vercel.json",
-    "public": true
+    "public": true,
+    "rewrites": [
+        {
+            "source": "/api/auth/:path*",
+            "destination": "/api/auth.go"
+        },
+        {
+            "source": "/api/rest/:path*",
+            "destination": "/api/rest.go"
+        }
+    ]
 }

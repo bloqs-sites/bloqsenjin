@@ -30,16 +30,24 @@ func (mux *Router) Route(route string, h Handle) {
 
 func (mux *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, mux.endpoint) {
+        w.Write([]byte(r.URL.Path))
+        w.Write([]byte("\n"))
+        w.Write([]byte(mux.endpoint))
+        w.Write([]byte("\n"))
+        w.Write([]byte("\n"))
 		http.NotFound(w, r)
 		return
 	}
 
 	path := r.URL.Path[len(mux.endpoint):]
 
-	println(path)
-
 	parts := strings.Split(path, "/")
 	if len(parts) == 0 {
+        w.Write([]byte(path))
+        w.Write([]byte("\n"))
+        w.Write([]byte(strings.Join(parts, "\t")))
+        w.Write([]byte("\n"))
+        w.Write([]byte("\n"))
 		http.NotFound(w, r)
 		return
 	}

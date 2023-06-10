@@ -10,5 +10,6 @@
             "source": "/api/rest/(.*)",
             "destination": "/api/rest.go"
         }
-    ]
+    ],
+    "trailingSlash": false
 }

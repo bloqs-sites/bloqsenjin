@@ -174,7 +174,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		})
 	}
 
-	if shares != nil && len(shares) > 0 {
+	if len(shares) > 0 {
 		if _, err := s.DBH.Insert(r.Context(), "shares", shares); err != nil {
 			s.DBH.Delete(r.Context(), "preference", map[string]any{
 				"id": strconv.Itoa(res_id),

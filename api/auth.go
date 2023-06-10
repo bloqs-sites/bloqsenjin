@@ -42,5 +42,5 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.Serve(w, r)
+	auth.Serve("/api/", w, r)
 }

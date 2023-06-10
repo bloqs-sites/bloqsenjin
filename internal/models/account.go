@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -316,7 +315,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}
 
 	likes_inserts := make([]map[string]string, 0, len(likes))
-	weight := strconv.Itoa(int(math.Floor(float64(100 / len(likes)))))
+	weight := strconv.Itoa(int(float64(100 / len(likes))))
 	for _, like := range likes {
 		likes_inserts = append(likes_inserts, map[string]string{
 			"account_id":    id,
@@ -371,23 +370,23 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 				id := res.Rows[0]["id"].(*int64)
 				w := res.Rows[0]["weight"].(*float32)
 
-                if err := s.DBH.Update(r.Context(), "shares", map[string]any{
+				if err := s.DBH.Update(r.Context(), "shares", map[string]any{
 					"weight": *w + 1.0,
 				}, map[string]any{
 					"id": *id,
 				}); err != nil {
-                    fmt.Printf("%v\n", err)
-                }
+					fmt.Printf("%v\n", err)
+				}
 			} else {
-                if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]string{
+				if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]string{
 					{
 						"preference1_id": strconv.Itoa(min),
 						"preference2_id": strconv.Itoa(max),
 						"weight":         "1",
 					},
 				}); err != nil {
-                    fmt.Printf("%v\n", err)
-                }
+					fmt.Printf("%v\n", err)
+				}
 			}
 		}
 	}

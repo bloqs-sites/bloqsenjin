@@ -44,5 +44,5 @@ func REST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rest.Serve(w, r)
+	rest.Serve("/api/", w, r)
 }

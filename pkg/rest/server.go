@@ -13,9 +13,9 @@ type RESTServer struct {
 	DBH db.DataManipulater
 }
 
-func NewRESTServer(crud db.DataManipulater) RESTServer {
+func NewRESTServer(endpoint string, crud db.DataManipulater) RESTServer {
 	return RESTServer{
-		mux: mux.NewRouter(),
+		mux: mux.NewRouter(endpoint),
 		DBH: crud,
 	}
 }

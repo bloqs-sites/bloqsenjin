@@ -27,7 +27,7 @@ func main() {
 	}
 
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
-	http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), rest.Server(context.Background()))
+	http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), rest.Server(context.Background(), "/"))
 	//conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	//if err != nil {
 	//	log.Fatalf("did not connect: %v", err)

@@ -8,7 +8,7 @@ import (
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 )
 
-func Server() http.HandlerFunc {
+func Server(endpoint string) http.HandlerFunc {
 	if err := conf.Compile(); err != nil {
 		panic(err)
 
@@ -22,7 +22,7 @@ func Server() http.HandlerFunc {
 	log_route := conf.MustGetConfOrDefault("/log", "auth", "logPath")
 	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
 
-	r := mux.NewRouter()
+	r := mux.NewRouter(endpoint)
 	r.Route(sign_route, SignRoute)
 	r.Route(log_route, LogRoute)
 	r.Route(types_route, func(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +33,6 @@ func Server() http.HandlerFunc {
 	return r.ServeHTTP
 }
 
-func Serve(w http.ResponseWriter, r *http.Request) {
-	Server()(w, r)
+func Serve(endpoint string, w http.ResponseWriter, r *http.Request) {
+	Server(endpoint)(w, r)
 }

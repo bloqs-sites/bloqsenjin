@@ -82,5 +82,5 @@ func main() {
 
 func startHTTPServer(ch chan error) {
 	fmt.Printf("Auth HTTP server port:\t %d\n", *httpPort)
-	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), auth_http.Server())
+	ch <- http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), auth_http.Server("/"))
 }

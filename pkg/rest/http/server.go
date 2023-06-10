@@ -13,7 +13,7 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
 
-func Server(ctx context.Context) http.HandlerFunc {
+func Server(ctx context.Context, endpoint string) http.HandlerFunc {
 	if err := conf.Compile(); err != nil {
 		panic(err)
 	}
@@ -23,7 +23,7 @@ func Server(ctx context.Context) http.HandlerFunc {
 		panic(fmt.Errorf("error creating DB instance of type `%T`:\t%s", dbh, err))
 	}
 
-	s := rest.NewRESTServer(dbh)
+	s := rest.NewRESTServer(endpoint, dbh)
 
 	s.AttachHandler(context.Background(), "/preference", new(models.PreferenceHandler))
 	s.AttachHandler(context.Background(), "/account", new(models.Account))
@@ -32,6 +32,6 @@ func Server(ctx context.Context) http.HandlerFunc {
 	return s.Serve()
 }
 
-func Serve(w http.ResponseWriter, r *http.Request) {
-	Server(r.Context())(w, r)
+func Serve(endpoint string, w http.ResponseWriter, r *http.Request) {
+	Server(r.Context(), endpoint)(w, r)
 }

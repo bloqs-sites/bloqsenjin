@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -50,6 +51,7 @@ func (Account) CreateTable() []db.Table {
 			Columns: []string{
 				"`account_id` INT UNSIGNED NOT NULL",
 				"`preference_id` INT UNSIGNED NOT NULL",
+				"`weight` FLOAT(6, 3) UNSIGNED NOT NULL",
 				"UNIQUE (`account_id`, `preference_id`)",
 			},
 		},
@@ -314,10 +316,12 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}
 
 	likes_inserts := make([]map[string]string, 0, len(likes))
+	weight := strconv.Itoa(int(math.Floor(float64(100 / len(likes)))))
 	for _, like := range likes {
 		likes_inserts = append(likes_inserts, map[string]string{
 			"account_id":    id,
 			"preference_id": like,
+			"weight":        weight,
 		})
 	}
 
@@ -335,6 +339,56 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		return nil, &mux.HttpError{
 			Body:   err.Error(),
 			Status: status,
+		}
+	}
+
+	for i := 0; i < len(likes); i++ {
+		for j := i + 1; j < len(likes); j++ {
+			var max, min int
+			if i < j {
+				min = i
+				max = j
+			} else {
+				min = j
+				max = i
+			}
+
+			res, err := s.DBH.Select(r.Context(), "shares", func() map[string]any {
+				return map[string]any{
+					"id":     new(int64),
+					"weight": new(float32),
+				}
+			}, map[string]any{
+				"preference1_id": min,
+				"preference2_id": max,
+			})
+
+			if err != nil {
+				continue
+			}
+
+			if len(res.Rows) > 0 {
+				id := res.Rows[0]["id"].(*int64)
+				w := res.Rows[0]["weight"].(*float32)
+
+                if err := s.DBH.Update(r.Context(), "shares", map[string]any{
+					"weight": *w + 1.0,
+				}, map[string]any{
+					"id": *id,
+				}); err != nil {
+                    fmt.Printf("%v\n", err)
+                }
+			} else {
+                if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]string{
+					{
+						"preference1_id": strconv.Itoa(min),
+						"preference2_id": strconv.Itoa(max),
+						"weight":         "1",
+					},
+				}); err != nil {
+                    fmt.Printf("%v\n", err)
+                }
+			}
 		}
 	}
 

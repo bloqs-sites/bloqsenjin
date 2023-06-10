@@ -7,7 +7,7 @@
             "destination": "/api/auth.go"
         },
         {
-            "source": "/api/rest/:path*",
+            "source": "/api/rest/(.*)",
             "destination": "/api/rest.go"
         }
     ]

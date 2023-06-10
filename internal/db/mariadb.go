@@ -272,7 +272,6 @@ func (dbh *MySQL) CreateViews(ctx context.Context, ts []db.View) error {
 			t.Name, t.Select))
 
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
 	}

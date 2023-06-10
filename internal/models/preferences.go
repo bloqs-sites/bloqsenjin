@@ -24,7 +24,7 @@ import (
 type PreferenceHandler struct {
 }
 
-func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (res *rest.Created, err error) {
+func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
 	var (
 		status uint16 = http.StatusInternalServerError
 
@@ -34,33 +34,29 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 
 	ct := r.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, mux.X_WWW_FORM_URLENCODED) {
-		if err = r.ParseForm(); err != nil {
+		if err := r.ParseForm(); err != nil {
 			status = http.StatusBadRequest
-			res = &rest.Created{
-				Status:  status,
-				Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
-			}
-			err = &mux.HttpError{
-				Body:   err.Error(),
-				Status: status,
-			}
-			return
+			return &rest.Created{
+					Status:  status,
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+				}, &mux.HttpError{
+					Body:   err.Error(),
+					Status: status,
+				}
 		}
 
 		name = r.FormValue("name")
 		description = r.FormValue("description")
 	} else if strings.HasPrefix(ct, mux.FORM_DATA) {
-		if err = r.ParseMultipartForm(0x400); err != nil {
+		if err := r.ParseMultipartForm(0x400); err != nil {
 			status = http.StatusBadRequest
-			res = &rest.Created{
-				Status:  status,
-				Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
-			}
-			err = &mux.HttpError{
-				Body:   err.Error(),
-				Status: status,
-			}
-			return
+			return &rest.Created{
+					Status:  status,
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+				}, &mux.HttpError{
+					Body:   err.Error(),
+					Status: status,
+				}
 		}
 
 		name = r.FormValue("name")
@@ -70,35 +66,26 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		h := w.Header()
 		mux.Append(&h, "Accept", mux.X_WWW_FORM_URLENCODED)
 		mux.Append(&h, "Accept", mux.FORM_DATA)
-		res = &rest.Created{
+		return &rest.Created{
 			Status:  status,
 			Message: fmt.Sprintf("request has the usupported media type `%s`", ct),
-		}
-		if err != nil {
-			err = &mux.HttpError{
-				Body:   err.Error(),
-				Status: status,
-			}
-		}
-		return
+		}, nil
 	}
 
 	if l := len(name); l > 80 || l <= 0 {
 		status = http.StatusUnprocessableEntity
-		res = &rest.Created{
+		return &rest.Created{
 			Status:  status,
 			Message: "`name` body field has to have a length between 1 and 80 characters",
-		}
-		return
+		}, nil
 	}
 
 	if l := len(description); l > 140 {
 		status = http.StatusUnprocessableEntity
-		res = &rest.Created{
+		return &rest.Created{
 			Status:  status,
 			Message: "`description` body field has to have a length with a maximum of 140 characters",
-		}
-		return
+		}, nil
 	}
 
 	a, err := authSrv(r.Context())
@@ -140,6 +127,17 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		}
 	}
 
+	preferences, err := s.DBH.Select(r.Context(), "preference", func() map[string]any {
+		return map[string]any{"id": new(int64)}
+	}, nil)
+	if err != nil {
+		status = http.StatusInternalServerError
+		return nil, &mux.HttpError{
+			Body:   err.Error(),
+			Status: status,
+		}
+	}
+
 	var result db.Result
 	result, err = s.DBH.Insert(r.Context(), "preference", []map[string]string{
 		{
@@ -150,11 +148,44 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 
 	if err != nil {
 		status = http.StatusInternalServerError
-		err = &mux.HttpError{
+		return nil, &mux.HttpError{
 			Body:   err.Error(),
 			Status: status,
 		}
-		return
+	}
+
+	shares := make([]map[string]string, 0, len(preferences.Rows))
+	res_id := int(*result.LastID)
+	for _, p := range preferences.Rows {
+		id := int(*p["id"].(*int64))
+		var id1, id2 string
+		if id < res_id {
+			id1 = strconv.Itoa(id)
+			id2 = strconv.Itoa(res_id)
+		} else {
+			id1 = strconv.Itoa(res_id)
+			id2 = strconv.Itoa(id)
+		}
+
+		shares = append(shares, map[string]string{
+			"preference1_id": id1,
+			"preference2_id": id2,
+			"weight":         "0",
+		})
+	}
+
+	if shares != nil && len(shares) > 0 {
+		if _, err := s.DBH.Insert(r.Context(), "shares", shares); err != nil {
+			s.DBH.Delete(r.Context(), "preference", map[string]any{
+				"id": strconv.Itoa(res_id),
+			})
+
+			status = http.StatusInternalServerError
+			return nil, &mux.HttpError{
+				Body:   err.Error(),
+				Status: status,
+			}
+		}
 	}
 
 	return &rest.Created{
@@ -356,6 +387,18 @@ func (p PreferenceHandler) CreateTable() []db.Table {
 				"`description` VARCHAR(140)",
 				"UNIQUE(`name`)",
 				"PRIMARY KEY(`id`)",
+			},
+		},
+		{
+			Name: "shares",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`preference1_id` INT UNSIGNED NOT NULL",
+				"`preference2_id` INT UNSIGNED NOT NULL",
+				"`weight` FLOAT(6,3) DEFAULT 0",
+				"UNIQUE(`preference1_id`, `preference2_id`)",
+				"PRIMARY KEY(`id`)",
+				"CHECK (preference1_id < preference2_id)",
 			},
 		},
 	}

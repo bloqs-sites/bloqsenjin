@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
+	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
@@ -76,6 +78,47 @@ func (m Account) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 	_, err = helpers.CheckOriginHeader(&h, r)
 
 	switch r.Method {
+	case "":
+		fallthrough
+	case http.MethodGet:
+		if err != nil {
+			return err
+		}
+
+		resources, err := m.Read(w, r, s)
+
+		if err != nil {
+			return err
+		}
+
+		if resources == nil {
+			return &mux.HttpError{
+				Status: http.StatusNotFound,
+			}
+		}
+
+		encoder := json.NewEncoder(w)
+		ctx := "https://schema.org/"
+		typ := "Person"
+		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "") {
+			if len(resources.Models) == 0 {
+				return &mux.HttpError{
+					Status: http.StatusNotFound,
+				}
+			} else {
+				resources.Models[0]["@context"] = ctx
+				resources.Models[0]["@type"] = typ
+				return encoder.Encode(resources.Models[0])
+			}
+		} else {
+			resources.Models = append([]db.JSON{
+				{
+					"@context": ctx,
+					"@type":    typ,
+				},
+			}, resources.Models...)
+			return encoder.Encode(resources.Models)
+		}
 	case http.MethodPost:
 		if err != nil {
 			return err
@@ -218,7 +261,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		return nil, err
 	}
 
-	permission := auth.CREATE_ACCOUNT
+	permission := bloqs_auth.CREATE_ACCOUNT
 	v, err := a.Validate(r.Context(), &proto.Token{
 		Jwt:         string(tk),
 		Permissions: (*uint64)(&permission),
@@ -398,8 +441,160 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}, nil
 }
 
-func (Account) Read(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
-	return nil, nil
+func (Account) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+	id := s.Seg(0)
+
+	you := conf.MustGetConfOrDefault("@", "REST", "myself")
+	api := conf.MustGetConf("REST", "domain").(string)
+
+	var (
+		result db.Result
+		err    error
+	)
+
+	if id != nil && *id == you {
+		a, err := authSrv(r.Context())
+
+		if err != nil {
+			return nil, err
+		}
+
+		tk, err := mux.ExtractToken(w, r)
+
+		if err != nil {
+			return nil, err
+		}
+
+		p := bloqs_auth.READ_ACCOUNT
+		v, err := a.Validate(r.Context(), &proto.Token{
+			Jwt:         string(tk),
+			Permissions: (*uint64)(&p),
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		if !v.Valid {
+			msg := ""
+			if v.Message != nil {
+				msg = *v.Message
+			}
+
+			return nil, &mux.HttpError{
+				Body:   msg,
+				Status: http.StatusUnauthorized,
+			}
+		}
+
+		claims := &auth.Claims{}
+		claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = json.Unmarshal(claims_str, claims)
+		if err != nil {
+			return nil, err
+		}
+		*id = claims.Payload.Client
+
+		res, err := s.DBH.Select(r.Context(), "credential_accounts", func() map[string]any {
+			return map[string]any{
+				"account_id": new(int64),
+			}
+		}, map[string]any{"credential_id": *id})
+
+		if err != nil {
+			return nil, err
+		}
+
+		var wait sync.WaitGroup
+
+		wait.Add(len(res.Rows))
+
+		accs := make([]db.JSON, 0, len(res.Rows))
+
+		search := func(id any) {
+			defer wait.Done()
+
+			var res db.Result
+			res, err = s.DBH.Select(r.Context(), "account", func() map[string]any {
+				return map[string]any{
+					"id":    new(int64),
+					"name":  new(string),
+					"image": new(string),
+				}
+			}, map[string]any{"id": id})
+
+			if err != nil {
+				return
+			}
+
+			acc := res.Rows[0]
+
+			res, err = s.DBH.Select(r.Context(), "account_likes", func() map[string]any {
+				return map[string]any{
+					"preference_id": new(int64),
+					"weight":        new(float32),
+				}
+			}, map[string]any{"account_id": acc["id"]})
+
+			if err != nil {
+				return
+			}
+
+			likes := make([]db.JSON, 0, len(res.Rows))
+			for _, i := range res.Rows {
+				i["url"] = fmt.Sprintf("%s/preference/%d", api, *i["preference_id"].(*int64))
+				i["@type"] = "Category"
+				delete(i, "preference_id")
+				likes = append(likes, i)
+			}
+
+			acc["likes"] = likes
+
+			accs = append(accs, acc)
+		}
+
+		for _, i := range res.Rows {
+			go search(i["account_id"])
+		}
+
+		wait.Wait()
+
+		result = db.Result{Rows: accs}
+	} else {
+		var where map[string]any = nil
+		if (id != nil) && (*id != "") {
+			where = map[string]any{"id": *id}
+		}
+
+		result, err = s.DBH.Select(r.Context(), "account", func() map[string]any {
+			return map[string]any{
+				"id":    new(int64),
+				"name":  new(string),
+				"image": new(string),
+			}
+		}, where)
+
+		for _, i := range result.Rows {
+			i["url"] = fmt.Sprintf("%s/account/%d", api, *i["id"].(*int64))
+		}
+	}
+
+	status := http.StatusOK
+	msg := ""
+	if err != nil {
+		status = http.StatusInternalServerError
+		msg = err.Error()
+	}
+
+	return &rest.Resource{
+		Models:  result.Rows,
+		Status:  uint16(status),
+		Message: msg,
+	}, err
 }
 
 func (Account) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {

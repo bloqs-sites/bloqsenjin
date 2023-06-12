@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
+	"strings"
 
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
@@ -85,10 +85,12 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 		validation  *proto.Validation
 		status      uint32
 		super       bool
+		typ         AuthType
 	)
 
 	switch x := in.Credentials.Credentials.(type) {
 	case *proto.Credentials_Basic:
+		typ = BASIC_EMAIL
 		err = s.auther.CheckAccessBasic(ctx, x)
 		if err != nil {
 			status = http.StatusInternalServerError
@@ -131,12 +133,12 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 		}, err
 	}
 
-	token, err = s.tokener.GenToken(ctx, &Payload{
+	if token, err = s.tokener.GenToken(ctx, &Payload{
 		Client:      *CredentialsToID(in.Credentials),
-		Permissions: Permissions(in.Permissions),
+		Permissions: Permission(in.Permissions),
 		Super:       super,
-	})
-	if err != nil {
+		Type:        typ,
+	}); err != nil {
 		status = http.StatusInternalServerError
 		if err, ok := err.(*mux.HttpError); ok {
 			status = uint32(err.Status)
@@ -148,7 +150,7 @@ func (s *AuthServer) LogIn(ctx context.Context, in *proto.AskPermissions) (*prot
 		}, err
 	}
 
-	permissions = Permissions(in.Permissions)
+	permissions = Permission(in.Permissions)
 	status = http.StatusOK
 	if id := CredentialsToID(in.Credentials); id != nil {
 		validation = Valid(fmt.Sprintf("Credentials for `%s` were created with success!", *id), &status)
@@ -225,16 +227,26 @@ func (s *AuthServer) IsSuper(ctx context.Context, in *proto.Credentials) (v *pro
 }
 
 func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Validation, error) {
-	valid, err := s.tokener.VerifyToken(ctx, Token(in.Jwt), Permissions(*in.Permissions))
+	valid, err := s.tokener.VerifyToken(ctx, Token(in.Jwt), Permission(*in.Permissions))
 	if valid {
 		return &proto.Validation{
 			Valid: valid,
 		}, err
 	}
 
-	msg := fmt.Sprintf("The token provided does not have the `%s` permission.", strconv.Itoa(int(*in.Permissions)))
+	var str strings.Builder
+	str.WriteString("The token provided it's invalid")
+	if err != nil {
+		str.WriteString(":\t")
+		str.WriteString(err.Error())
+	}
+	msg := str.String()
+
 	return &proto.Validation{
-		Valid:   valid,
-		Message: &msg,
-	}, err
+			Valid:   valid,
+			Message: &msg,
+		}, &mux.HttpError{
+			Body:   msg,
+			Status: http.StatusForbidden,
+		}
 }

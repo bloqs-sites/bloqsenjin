@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type Handle func(w http.ResponseWriter, r *http.Request)
+type Handle func(w http.ResponseWriter, r *http.Request, segs []string)
 type Router struct {
 	endpoint string
 	routes   map[string]Handle
@@ -55,5 +55,5 @@ func (mux *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler(w, r)
+	handler(w, r, parts[2:])
 }

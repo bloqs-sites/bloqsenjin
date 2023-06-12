@@ -7,28 +7,29 @@ import (
 )
 
 type Token string
-type Permissions uint64
+type Permission uint64
 type AuthType uint8
 
 const (
-	NIL                        Permissions = 0
-	SIGN_OUT                               = 1 << iota
-	GRANT_SUPER                            = 1 << iota
-	REVOKE_SUPER                           = 1 << iota
-	NEEDLE_FOR_NEXT_PERMISSION             = iota
+	NIL                        Permission = 0
+	SIGN_OUT                              = 1 << iota
+	GRANT_SUPER                           = 1 << iota
+	REVOKE_SUPER                          = 1 << iota
+	NEEDLE_FOR_NEXT_PERMISSION            = iota
 
 	BASIC_EMAIL AuthType = iota - NEEDLE_FOR_NEXT_PERMISSION
 )
 
 type Payload struct {
-	Client      string      `json:"client"`
-	Permissions Permissions `json:"permissions"`
-	Super       bool        `json:"is_super"`
+	Client      string     `json:"client"`
+	Permissions Permission `json:"permissions"`
+	Super       bool       `json:"is_super"`
+	Type        AuthType   `json:"type"`
 }
 
 type Tokener interface {
 	GenToken(context.Context, *Payload) (Token, error)
-	VerifyToken(context.Context, Token, Permissions) (bool, error)
+	VerifyToken(context.Context, Token, Permission) (bool, error)
 	RevokeToken(context.Context, Token) error
 }
 

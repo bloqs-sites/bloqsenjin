@@ -8,9 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
-	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
@@ -19,7 +18,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
-func LogRoute(w http.ResponseWriter, r *http.Request) {
+func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 	var (
 		err    error
 		v      *proto.TokenValidation
@@ -37,7 +36,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost: // log in
 		if err != nil {
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.ErrorToValidation(err, &status),
+				Validation: auth.ErrorToValidation(err, &status),
 			}
 			goto respond
 		}
@@ -50,7 +49,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
 				}
 				goto respond
 			}
@@ -58,7 +57,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if err = r.ParseMultipartForm(32 << 20); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
 				}
 				goto respond
 			}
@@ -66,7 +65,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
 				}
 				goto respond
 			} else {
@@ -74,7 +73,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				if err := p.Unmarshal(buf, ask); err != nil {
 					status = http.StatusBadRequest
 					v = &proto.TokenValidation{
-						Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
+						Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
 					}
 					goto respond
 				}
@@ -86,7 +85,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			bloqs_http.Append(&h, "Accept", bloqs_http.FORM_DATA)
 			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
+				Validation: auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
 			}
 			goto respond
 		}
@@ -95,7 +94,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		if !r.URL.Query().Has(t) {
 			status = http.StatusBadRequest
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the method to use for authentication/authorization was not defined. Define it with one of the supported values (.%s).\n", t, types_route), &status),
+				Validation: auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the method to use for authentication/authorization was not defined. Define it with one of the supported values (.%s).\n", t, types_route), &status),
 			}
 			goto respond
 		}
@@ -104,10 +103,10 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 
 		switch method {
 		case "basic":
-			if !bloqs_auth.IsAuthMethodSupported(method) {
+			if !auth.IsAuthMethodSupported(method) {
 				status = http.StatusUnprocessableEntity
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` value `%s` it's unsupported. Define it with one of the supported values (.%s).\n", t, method, types_route), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` value `%s` it's unsupported. Define it with one of the supported values (.%s).\n", t, method, types_route), &status),
 				}
 				goto respond
 			}
@@ -118,7 +117,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				if email == "" {
 					status = http.StatusUnprocessableEntity
 					v = &proto.TokenValidation{
-						Validation: bloqs_auth.Invalid("`email` body field is empty and needs to be defined to proceed.\n", &status),
+						Validation: auth.Invalid("`email` body field is empty and needs to be defined to proceed.\n", &status),
 					}
 					goto respond
 				}
@@ -128,7 +127,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				if pass == "" {
 					status = http.StatusUnprocessableEntity
 					v = &proto.TokenValidation{
-						Validation: bloqs_auth.Invalid("`pass` body field is empty and needs to be defined to proceed.\n", &status),
+						Validation: auth.Invalid("`pass` body field is empty and needs to be defined to proceed.\n", &status),
 					}
 					goto respond
 				}
@@ -145,7 +144,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		default:
 			status = http.StatusBadRequest
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` has an unsupported value. Define it with one of the supported values (.%s).\n", t, types_route), &status),
+				Validation: auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` has an unsupported value. Define it with one of the supported values (.%s).\n", t, types_route), &status),
 			}
 			goto respond
 		}
@@ -154,7 +153,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			status = http.StatusInternalServerError
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.ErrorToValidation(err, &status),
+				Validation: auth.ErrorToValidation(err, &status),
 			}
 			goto respond
 		}
@@ -170,25 +169,17 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		if ask == nil {
 			perm := conf.MustGetConfOrDefault("permissions", "auth", "permissionsQueryParam")
 			permissions := auth.DEFAULT_PERMISSIONS
-			list := make(map[string]bloqs_auth.Permissions, len(auth.Permissions))
-			for k, v := range auth.Permissions {
-				list[k] = v
-			}
-			if validation.Valid {
-				for k, v := range auth.SuperPermissions {
-					list[k] = v
-				}
-			}
+			list := auth.GetPermissionsList(validation.Valid)
 			if r.URL.Query().Has(perm) {
 				ps, ok := r.URL.Query()[perm]
 				if ok {
-					permissions = bloqs_auth.NIL
+					permissions = auth.NIL
 					for _, i := range ps {
 						p, ok := list[i]
 						if !ok {
 							status = http.StatusBadRequest
 							v = &proto.TokenValidation{
-								Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the permissions for the token to have was has an invalid value. Check which values are supported (.%s).\n", perm, "TODO"), &status),
+								Validation: auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the permissions for the token to have was has an invalid value. Check which values are supported (.%s).\n", perm, "TODO"), &status),
 							}
 							goto respond
 						}
@@ -212,7 +203,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete: // log out
 		if err != nil {
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.ErrorToValidation(err, &status),
+				Validation: auth.ErrorToValidation(err, &status),
 			}
 			goto respond
 		}
@@ -224,7 +215,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
 				}
 				goto respond
 			} else {
@@ -236,7 +227,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
 				}
 				goto respond
 			}
@@ -248,7 +239,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if err = r.ParseMultipartForm(32 << 20); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
 				}
 				goto respond
 			}
@@ -260,7 +251,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status),
 				}
 				goto respond
 			} else {
@@ -268,7 +259,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				if err := p.Unmarshal(buf, tk); err != nil {
 					status = http.StatusBadRequest
 					v = &proto.TokenValidation{
-						Validation: bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
+						Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
 					}
 					goto respond
 				}
@@ -281,7 +272,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 			bloqs_http.Append(&h, "Accept", bloqs_http.FORM_DATA)
 			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
+				Validation: auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
 			}
 			goto respond
 		}
@@ -297,7 +288,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 				}
 
 				v = &proto.TokenValidation{
-					Validation: bloqs_auth.ErrorToValidation(err, &status),
+					Validation: auth.ErrorToValidation(err, &status),
 				}
 
 				goto respond
@@ -312,7 +303,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			status = http.StatusInternalServerError
 			v = &proto.TokenValidation{
-				Validation: bloqs_auth.ErrorToValidation(err, &status),
+				Validation: auth.ErrorToValidation(err, &status),
 			}
 			goto respond
 		}
@@ -348,7 +339,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request) {
 	default:
 		status = http.StatusMethodNotAllowed
 		v = &proto.TokenValidation{
-			Validation: bloqs_auth.Invalid("", &status),
+			Validation: auth.Invalid("", &status),
 		}
 		goto respond
 	}

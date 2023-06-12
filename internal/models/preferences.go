@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -100,7 +101,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		return nil, err
 	}
 
-	permission := auth.CREATE_PREFERENCE
+	permission := bloqs_auth.CREATE_PREFERENCE
 	v, err := a.Validate(r.Context(), &proto.Token{
 		Jwt:         string(tk),
 		Permissions: (*uint64)(&permission),
@@ -216,8 +217,10 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 		rn := len(rows)
 
 		if rn < 1 {
-			//return rows, nil
-			return nil, nil
+			return &rest.Resource{
+				Models: rows,
+				Status: 200,
+			}, nil
 		}
 
 		json := make([]db.JSON, 1)
@@ -235,13 +238,17 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 				v["@context"] = "https://schema.org/"
 				v["@type"] = "CategoryCode"
 				json[0] = v
-				//return json, nil
-				return nil, nil
+				return &rest.Resource{
+					Models: json,
+					Status: 200,
+				}, nil
 			}
 		}
 
-		//return json, nil
-		return nil, nil
+		return &rest.Resource{
+			Models: json,
+			Status: 200,
+		}, nil
 	}
 
 	res, err := dbh.Select(r.Context(), "preference", p.MapGenerator(), nil)
@@ -253,8 +260,9 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 	rn := len(rows)
 
 	if rn < 1 {
-		//return rows, nil
-		return nil, nil
+		return &rest.Resource{
+			Models: rows,
+		}, nil
 	}
 
 	json, i := make([]db.JSON, len(rows)+1), 0
@@ -270,8 +278,9 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 		json[i] = v
 	}
 
-	//return json, nil
-	return nil, nil
+	return &rest.Resource{
+		Models: json,
+	}, nil
 }
 
 func (p PreferenceHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
@@ -300,28 +309,30 @@ func (p PreferenceHandler) Handle(w http.ResponseWriter, r *http.Request, s rest
 			return err
 		}
 
-		redirect, err := p.Read(w, r, s)
+		res, err := p.Read(w, r, s)
 
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("redirect.Message: %v\n", redirect.Message)
+		w.Header().Set("Content-Type", "application/json")
 
-		//w.Header().Set("Content-Type", "application/json")
+		if res == nil {
+			return errors.New("no res")
+		}
 
-		//if models := res.Models; len(models) == 0 {
-		//	_, err = w.Write([]byte("{}"))
-		//} else if len(models) == 1 {
-		//	err = json.NewEncoder(w).Encode(models[0])
-		//} else {
-		//	err = json.NewEncoder(w).Encode(models)
-		//}
+		if models := res.Models; len(models) == 0 {
+			_, err = w.Write([]byte("{}"))
+		} else if len(models) == 1 {
+			err = json.NewEncoder(w).Encode(models[0])
+		} else {
+			err = json.NewEncoder(w).Encode(models)
+		}
 
-		//if err != nil {
-		//	w.WriteHeader(http.StatusInternalServerError)
-		//	fmt.Fprintf(w, "%s", err.Error())
-		//}
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "%s", err.Error())
+		}
 	case http.MethodPost:
 		if err != nil {
 			return err

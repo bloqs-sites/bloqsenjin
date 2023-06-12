@@ -22,6 +22,16 @@ func NewBloqsTokener(secrets db.KVDBer) *BloqsTokener {
 	return &BloqsTokener{secrets}
 }
 
+type NoPermissionsError struct {
+	permission auth.Permission
+}
+
+func (err NoPermissionsError) Error() string {
+	format := "The token provided does not have the `%s` permission."
+	hash := auth.GetPermissionsHash(err.permission)
+	return fmt.Sprintf(format, hash)
+}
+
 func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr auth.Token, err error) {
 	tokenstr = ""
 
@@ -52,6 +62,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 	var (
 		str      string
 		auth_api = conf.MustGetConfOrDefault("", "auth", "domain")
+		rest_api = conf.MustGetConfOrDefault("", "REST", "domain")
 		token    = jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{
 			*p,
 			jwt.RegisteredClaims{
@@ -60,7 +71,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 				NotBefore: jwt.NewNumericDate(time.Now()),
 				Issuer:    auth_api,
 				Subject:   p.Client,
-				Audience:  []string{auth_api},
+				Audience:  []string{auth_api, rest_api},
 				ID:        uuid.NewString(),
 			},
 		})
@@ -72,7 +83,7 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 	return
 }
 
-func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Permissions) (bool, error) {
+func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Permission) (bool, error) {
 	token, err := t.ParseToken(ctx, tk)
 
 	if err != nil {
@@ -80,7 +91,11 @@ func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Pe
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		return (claims.Payload.Permissions & p) == p, nil
+		if (claims.Payload.Permissions & p) == p {
+			return true, nil
+		} else {
+			return false, NoPermissionsError{p}
+		}
 	} else {
 		if errors.Is(err, jwt.ErrTokenMalformed) {
 			return false, fmt.Errorf("that's not even a token:\t%v", err)
@@ -120,11 +135,28 @@ func (t *BloqsTokener) RevokeToken(ctx context.Context, tk auth.Token) error {
 
 func (t *BloqsTokener) ParseToken(ctx context.Context, tk auth.Token) (*jwt.Token, error) {
 	auth_api := conf.MustGetConf("auth", "domain").(string)
-	return jwt.ParseWithClaims(string(tk), &Claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
+	rest_api := conf.MustGetConf("REST", "domain").(string)
+
+	token, err := jwt.ParseWithClaims(string(tk), &Claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
 		"HS256",
 		"HS384",
 		"HS512",
-	}), jwt.WithJSONNumber(), jwt.WithIssuer(auth_api), jwt.WithLeeway(5*time.Second))
+	}), jwt.WithJSONNumber(), jwt.WithLeeway(5*time.Second))
+
+	if err != nil {
+		return nil, err
+	}
+
+	issuer, err := token.Claims.GetIssuer()
+	if err != nil {
+		return nil, err
+	}
+
+	if issuer != auth_api && issuer != rest_api {
+		return nil, errors.New("token has invalid claims: token has invalid issuer")
+	}
+
+	return token, err
 }
 
 func (t *BloqsTokener) keyfunc(ctx context.Context) jwt.Keyfunc {

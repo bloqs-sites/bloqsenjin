@@ -9,8 +9,9 @@ import (
 )
 
 type RESTServer struct {
-	mux *mux.Router
-	DBH db.DataManipulater
+	mux      *mux.Router
+	DBH      db.DataManipulater
+	segments []string
 }
 
 func NewRESTServer(endpoint string, crud db.DataManipulater) RESTServer {
@@ -20,15 +21,16 @@ func NewRESTServer(endpoint string, crud db.DataManipulater) RESTServer {
 	}
 }
 
-func (s RESTServer) AttachHandler(ctx context.Context, route string, h Handler) {
+func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler) {
 	db := s.DBH
 	db.CreateTables(ctx, h.CreateTable())
 	db.CreateIndexes(ctx, h.CreateIndexes())
 	db.CreateViews(ctx, h.CreateViews())
 
-	s.mux.Route(route, func(w http.ResponseWriter, r *http.Request) {
+	s.mux.Route(route, func(w http.ResponseWriter, r *http.Request, segs []string) {
 		var status uint16 = http.StatusInternalServerError
-		err := h.Handle(w, r, s)
+		s.segments = segs
+		err := h.Handle(w, r, *s)
 
 		if err != nil {
 			if err, ok := err.(*mux.HttpError); ok {
@@ -50,4 +52,16 @@ func (s RESTServer) AttachHandler(ctx context.Context, route string, h Handler) 
 
 func (s *RESTServer) Serve() http.HandlerFunc {
 	return s.mux.ServeHTTP
+}
+
+func (s RESTServer) Seg(i int) *string {
+	if len(s.segments) <= i {
+		return nil
+	}
+
+	return &s.segments[i]
+}
+
+func (s RESTServer) SegLen() int {
+	return len(s.segments)
 }

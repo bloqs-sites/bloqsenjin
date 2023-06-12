@@ -25,7 +25,7 @@ func Server(endpoint string) http.HandlerFunc {
 	r := mux.NewRouter(endpoint)
 	r.Route(sign_route, SignRoute)
 	r.Route(log_route, LogRoute)
-	r.Route(types_route, func(w http.ResponseWriter, r *http.Request) {
+	r.Route(types_route, func(w http.ResponseWriter, r *http.Request, segs []string) {
 		// XXX
 		json.NewEncoder(w).Encode(conf.MustGetConfOrDefault([]any{}, "auth", "supported"))
 	})

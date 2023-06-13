@@ -197,18 +197,16 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 }
 
 func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
-	dbh := s.DBH
+    id := s.Seg(0)
 
-	parts := strings.Split(r.URL.Path, "/")
-
-	if len(parts) > 2 && len(parts[2]) > 0 {
-		id, err := strconv.ParseInt(parts[2], 10, 0)
+	if id != nil {
+		id, err := strconv.ParseInt(*id, 10, 0)
 
 		if err != nil {
 			return nil, err
 		}
 
-		res, err := dbh.Select(r.Context(), "preference", p.MapGenerator(), nil)
+		res, err := s.DBH.Select(r.Context(), "preference", p.MapGenerator(), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +249,7 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 		}, nil
 	}
 
-	res, err := dbh.Select(r.Context(), "preference", p.MapGenerator(), nil)
+	res, err := s.DBH.Select(r.Context(), "preference", p.MapGenerator(), nil)
 	if err != nil {
 		return nil, err
 	}

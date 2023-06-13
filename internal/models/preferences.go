@@ -3,7 +3,6 @@ package models
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -197,88 +196,39 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 }
 
 func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
-    id := s.Seg(0)
+	id := s.Seg(0)
 
-	if id != nil {
-		id, err := strconv.ParseInt(*id, 10, 0)
-
-		if err != nil {
-			return nil, err
-		}
-
-		res, err := s.DBH.Select(r.Context(), "preference", p.MapGenerator(), nil)
-		if err != nil {
-			return nil, err
-		}
-
-		rows := res.Rows
-		rn := len(rows)
-
-		if rn < 1 {
-			return &rest.Resource{
-				Models: rows,
-				Status: 200,
-			}, nil
-		}
-
-		json := make([]db.JSON, 1)
-
-		for _, v := range rows {
-			i, ok := v["id"]
-
-			if !ok {
-				continue
-			}
-
-			j, ok := i.(*int64)
-
-			if ok && *j == id {
-				v["@context"] = "https://schema.org/"
-				v["@type"] = "CategoryCode"
-				json[0] = v
-				return &rest.Resource{
-					Models: json,
-					Status: 200,
-				}, nil
-			}
-		}
-
-		return &rest.Resource{
-			Models: json,
-			Status: 200,
-		}, nil
+	var where map[string]any = nil
+	if (id != nil) && (*id != "") {
+		where = map[string]any{"id": *id}
 	}
 
-	res, err := s.DBH.Select(r.Context(), "preference", p.MapGenerator(), nil)
+	result, err := s.DBH.Select(r.Context(), "preference", func() map[string]any {
+		return map[string]any{
+			"id":          new(int64),
+			"name":        new(string),
+			"description": new(string),
+		}
+	}, where)
+
+	api := conf.MustGetConf("REST", "domain").(string)
+
+	for _, i := range result.Rows {
+		i["url"] = fmt.Sprintf("%s/preference/%d", api, *i["id"].(*int64))
+	}
+
+	status := http.StatusOK
+	msg := ""
 	if err != nil {
-		return nil, err
-	}
-
-	rows := res.Rows
-	rn := len(rows)
-
-	if rn < 1 {
-		return &rest.Resource{
-			Models: rows,
-		}, nil
-	}
-
-	json, i := make([]db.JSON, len(rows)+1), 0
-
-	json[i] = db.JSON{
-		"@context": "https://schema.org/",
-	}
-
-	for _, v := range rows {
-		v["@type"] = "CategoryCode"
-
-		i++
-		json[i] = v
+		status = http.StatusInternalServerError
+		msg = err.Error()
 	}
 
 	return &rest.Resource{
-		Models: json,
-	}, nil
+		Models:  result.Rows,
+		Status:  uint16(status),
+		Message: msg,
+	}, err
 }
 
 func (p PreferenceHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
@@ -307,29 +257,40 @@ func (p PreferenceHandler) Handle(w http.ResponseWriter, r *http.Request, s rest
 			return err
 		}
 
-		res, err := p.Read(w, r, s)
+		resources, err := p.Read(w, r, s)
 
 		if err != nil {
 			return err
 		}
 
+		if resources == nil {
+			return &mux.HttpError{
+				Status: http.StatusNotFound,
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-
-		if res == nil {
-			return errors.New("no res")
-		}
-
-		if models := res.Models; len(models) == 0 {
-			_, err = w.Write([]byte("{}"))
-		} else if len(models) == 1 {
-			err = json.NewEncoder(w).Encode(models[0])
+		encoder := json.NewEncoder(w)
+		ctx := "https://schema.org/"
+		typ := "CategoryCode"
+		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "") {
+			if len(resources.Models) == 0 {
+				return &mux.HttpError{
+					Status: http.StatusNotFound,
+				}
+			} else {
+				resources.Models[0]["@context"] = ctx
+				resources.Models[0]["@type"] = typ
+				return encoder.Encode(resources.Models[0])
+			}
 		} else {
-			err = json.NewEncoder(w).Encode(models)
-		}
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "%s", err.Error())
+			resources.Models = append([]db.JSON{
+				{
+					"@context": ctx,
+					"@type":    typ,
+				},
+			}, resources.Models...)
+			return encoder.Encode(resources.Models)
 		}
 	case http.MethodPost:
 		if err != nil {
@@ -382,8 +343,6 @@ func (p PreferenceHandler) Handle(w http.ResponseWriter, r *http.Request, s rest
 			Status: uint16(status),
 		}
 	}
-
-	return errors.New("")
 }
 
 func (p PreferenceHandler) CreateTable() []db.Table {

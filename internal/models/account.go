@@ -97,6 +97,7 @@ func (m Account) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 			}
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
 		ctx := "https://schema.org/"
 		typ := "Person"

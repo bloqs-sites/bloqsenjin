@@ -35,7 +35,6 @@ func (Account) CreateTable() []db.Table {
 				"`name` VARCHAR(80) NOT NULL",
 				"`hasAdultConsideration` BOOL DEFAULT 0",
 				"`image` VARCHAR(254) DEFAULT NULL",
-				"UNIQUE(`name`)",
 				"PRIMARY KEY(`id`)",
 			},
 		},
@@ -101,7 +100,7 @@ func (m Account) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 		encoder := json.NewEncoder(w)
 		ctx := "https://schema.org/"
 		typ := "Person"
-		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "") {
+		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "" && (r.URL.Path != "/account/@")) {
 			if len(resources.Models) == 0 {
 				return &mux.HttpError{
 					Status: http.StatusNotFound,
@@ -358,78 +357,80 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}
 	}
 
-	likes_inserts := make([]map[string]string, 0, len(likes))
-	weight := strconv.Itoa(int(float64(100 / len(likes))))
-	for _, like := range likes {
-		likes_inserts = append(likes_inserts, map[string]string{
-			"account_id":    id,
-			"preference_id": like,
-			"weight":        weight,
-		})
-	}
-
-	_, err = s.DBH.Insert(r.Context(), "account_likes", likes_inserts)
-
-	if err != nil {
-		s.DBH.Delete(r.Context(), "account", map[string]any{"id": id})
-
-		s.DBH.Delete(r.Context(), "credential_accounts", map[string]any{
-			"credential_id": claims.Payload.Client,
-			"account_id":    id,
-		})
-
-		status = http.StatusInternalServerError
-		return nil, &mux.HttpError{
-			Body:   err.Error(),
-			Status: status,
+	if len(likes) != 0 {
+		likes_inserts := make([]map[string]string, 0, len(likes))
+		weight := strconv.Itoa(int(float64(100 / len(likes))))
+		for _, like := range likes {
+			likes_inserts = append(likes_inserts, map[string]string{
+				"account_id":    id,
+				"preference_id": like,
+				"weight":        weight,
+			})
 		}
-	}
 
-	for i := 0; i < len(likes); i++ {
-		for j := i + 1; j < len(likes); j++ {
-			var max, min int
-			if i < j {
-				min = i
-				max = j
-			} else {
-				min = j
-				max = i
-			}
+		_, err = s.DBH.Insert(r.Context(), "account_likes", likes_inserts)
 
-			res, err := s.DBH.Select(r.Context(), "shares", func() map[string]any {
-				return map[string]any{
-					"id":     new(int64),
-					"weight": new(float32),
-				}
-			}, map[string]any{
-				"preference1_id": min,
-				"preference2_id": max,
+		if err != nil {
+			s.DBH.Delete(r.Context(), "account", map[string]any{"id": id})
+
+			s.DBH.Delete(r.Context(), "credential_accounts", map[string]any{
+				"credential_id": claims.Payload.Client,
+				"account_id":    id,
 			})
 
-			if err != nil {
-				continue
+			status = http.StatusInternalServerError
+			return nil, &mux.HttpError{
+				Body:   err.Error(),
+				Status: status,
 			}
+		}
 
-			if len(res.Rows) > 0 {
-				id := res.Rows[0]["id"].(*int64)
-				w := res.Rows[0]["weight"].(*float32)
-
-				if err := s.DBH.Update(r.Context(), "shares", map[string]any{
-					"weight": *w + 1.0,
-				}, map[string]any{
-					"id": *id,
-				}); err != nil {
-					fmt.Printf("%v\n", err)
+		for i := 0; i < len(likes); i++ {
+			for j := i + 1; j < len(likes); j++ {
+				var max, min int
+				if i < j {
+					min = i
+					max = j
+				} else {
+					min = j
+					max = i
 				}
-			} else {
-				if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]string{
-					{
-						"preference1_id": strconv.Itoa(min),
-						"preference2_id": strconv.Itoa(max),
-						"weight":         "1",
-					},
-				}); err != nil {
-					fmt.Printf("%v\n", err)
+
+				res, err := s.DBH.Select(r.Context(), "shares", func() map[string]any {
+					return map[string]any{
+						"id":     new(int64),
+						"weight": new(float32),
+					}
+				}, map[string]any{
+					"preference1_id": min,
+					"preference2_id": max,
+				})
+
+				if err != nil {
+					continue
+				}
+
+				if len(res.Rows) > 0 {
+					id := res.Rows[0]["id"].(*int64)
+					w := res.Rows[0]["weight"].(*float32)
+
+					if err := s.DBH.Update(r.Context(), "shares", map[string]any{
+						"weight": *w + 1.0,
+					}, map[string]any{
+						"id": *id,
+					}); err != nil {
+						fmt.Printf("%v\n", err)
+					}
+				} else {
+					if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]string{
+						{
+							"preference1_id": strconv.Itoa(min),
+							"preference2_id": strconv.Itoa(max),
+							"weight":         "1",
+						},
+					}); err != nil {
+						fmt.Printf("%v\n", err)
+					}
 				}
 			}
 		}

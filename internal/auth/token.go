@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -20,16 +22,6 @@ type BloqsTokener struct {
 
 func NewBloqsTokener(secrets db.KVDBer) *BloqsTokener {
 	return &BloqsTokener{secrets}
-}
-
-type NoPermissionsError struct {
-	permission auth.Permission
-}
-
-func (err NoPermissionsError) Error() string {
-	format := "The token provided does not have the `%s` permission."
-	hash := auth.GetPermissionsHash(err.permission)
-	return fmt.Sprintf(format, hash)
 }
 
 func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr auth.Token, err error) {
@@ -87,24 +79,35 @@ func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Pe
 	token, err := t.ParseToken(ctx, tk)
 
 	if err != nil {
-		return false, err
+		return false, &mux.HttpError{
+			Body:   err.Error(),
+			Status: http.StatusUnauthorized,
+		}
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		if (claims.Payload.Permissions & p) == p {
 			return true, nil
 		} else {
-			return false, NoPermissionsError{p}
+			return false, auth.NoPermissionsError{
+				Permission: p,
+			}
 		}
 	} else {
+		msg := ""
 		if errors.Is(err, jwt.ErrTokenMalformed) {
-			return false, fmt.Errorf("that's not even a token:\t%v", err)
+			msg = fmt.Sprintf("that's not even a token:\t%v", err)
 		} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			return false, fmt.Errorf("invalid signature:\t%v", err)
+			msg = fmt.Sprintf("invalid signature:\t%v", err)
 		} else if errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenNotValidYet) {
-			return false, fmt.Errorf("timing is everything:\t%v", err)
+			msg = fmt.Sprintf("timing is everything:\t%v", err)
 		} else {
-			return false, fmt.Errorf("couldn't handle this token:\t%v", err)
+			msg = fmt.Sprintf("couldn't handle this token:\t%v", err)
+		}
+
+		return false, &mux.HttpError{
+			Body:   msg,
+			Status: http.StatusUnauthorized,
 		}
 	}
 }

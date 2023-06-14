@@ -27,7 +27,7 @@ func Server(ctx context.Context, endpoint string) http.HandlerFunc {
 
 	s.AttachHandler(context.Background(), "/preference", new(models.PreferenceHandler))
 	s.AttachHandler(context.Background(), "/account", new(models.Account))
-	//s.AttachHandler(context.Background(), "bloq", new(models.BloqHandler))
+	s.AttachHandler(context.Background(), "/bloq", new(models.BloqHandler))
 
 	return s.Serve()
 }

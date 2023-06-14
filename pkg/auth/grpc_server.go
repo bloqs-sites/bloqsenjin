@@ -242,11 +242,15 @@ func (s *AuthServer) Validate(ctx context.Context, in *proto.Token) (*proto.Vali
 	}
 	msg := str.String()
 
-	return &proto.Validation{
-			Valid:   valid,
-			Message: &msg,
-		}, &mux.HttpError{
+	if _, ok := err.(NoPermissionsError); ok {
+		err = &mux.HttpError{
 			Body:   msg,
 			Status: http.StatusForbidden,
 		}
+	}
+
+	return &proto.Validation{
+		Valid:   valid,
+		Message: &msg,
+	}, err
 }

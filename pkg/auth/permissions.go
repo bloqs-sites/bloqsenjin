@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"strconv"
 )
 
@@ -63,4 +64,14 @@ func GetPermissionsHash(p Permission) string {
 	}
 
 	return strconv.Itoa(int(p))
+}
+
+type NoPermissionsError struct {
+	Permission Permission
+}
+
+func (err NoPermissionsError) Error() string {
+	format := "The token provided does not have the `%s` permission."
+	hash := GetPermissionsHash(err.Permission)
+	return fmt.Sprintf(format, hash)
 }

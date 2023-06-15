@@ -387,7 +387,7 @@ func (BloqHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 	api := conf.MustGetConf("REST", "domain").(string)
 
 	for _, v := range result.Rows {
-		result, err := s.DBH.Select(r.Context(), "bloq", func() map[string]any {
+		result, err := s.DBH.Select(r.Context(), "bloq_image", func() map[string]any {
 			return map[string]any{"image": new(string)}
 		}, map[string]any{"bloq_id": v["id"]})
 

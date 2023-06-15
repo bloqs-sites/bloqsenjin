@@ -363,79 +363,75 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 }
 
 func (BloqHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
-	// dbh := *s.GetDB()
-	//
-	// parts := strings.Split(r.URL.Path, "/")
-	//
-	//	if len(parts) > 2 && len(parts[2]) > 0 {
-	//		id, err := strconv.ParseInt(parts[2], 10, 0)
-	//
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//
-	//		res, err := dbh.Select(r.Context(), "bloq_basic", h.MapGenerator(), nil)
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//
-	//		rows := res.Rows
-	//		rn := len(rows)
-	//
-	//		if rn < 1 {
-	//			return rows, nil
-	//		}
-	//
-	//		json := make([]db.JSON, 1)
-	//
-	//		for _, v := range rows {
-	//			i, ok := v["id"]
-	//
-	//			if !ok {
-	//				continue
-	//			}
-	//
-	//			j, ok := i.(*int64)
-	//
-	//			if ok && *j == id {
-	//				v["@context"] = "https://schema.org/"
-	//				v["@type"] = "Product"
-	//				json[0] = v
-	//				return json, nil
-	//			}
-	//		}
-	//
-	//		return json, nil
-	//	}
-	//
-	// res, err := dbh.Select(context.Background(), "bloq_basic", h.MapGenerator(), nil)
-	//
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//
-	// rows := res.Rows
-	// rn := len(rows)
-	//
-	//	if rn < 1 {
-	//		return rows, nil
-	//	}
-	//
-	// json, i := make([]db.JSON, len(rows)+1), 0
-	//
-	//	json[i] = db.JSON{
-	//		"@context": "https://schema.org/",
-	//	}
-	//
-	//	for _, v := range rows {
-	//		v["@type"] = "Product"
-	//
-	//		i++
-	//		json[i] = v
-	//	}
-	//
-	// return json, nil
-	return nil, nil
+	id := s.Seg(0)
+
+	var where map[string]any = nil
+	if (id != nil) && (*id != "") {
+		where = map[string]any{"id": *id}
+	}
+
+	result, err := s.DBH.Select(r.Context(), "bloq", func() map[string]any {
+		return map[string]any{
+			"id":                    new(int64),
+			"category":              new(int64),
+			"name":                  new(string),
+			"description":           new(string),
+			"hasAdultConsideration": new(bool),
+		}
+	}, where)
+
+	if err != nil {
+		return nil, err
+	}
+
+	api := conf.MustGetConf("REST", "domain").(string)
+
+	for _, v := range result.Rows {
+		result, err := s.DBH.Select(r.Context(), "bloq", func() map[string]any {
+			return map[string]any{"image": new(string)}
+		}, map[string]any{"bloq_id": v["id"]})
+
+		if err != nil {
+			return nil, err
+		}
+
+		v["image"] = result.Rows[0]["image"]
+
+		result, err = s.DBH.Select(r.Context(), "bloq_rating", func() map[string]any {
+			return map[string]any{
+                "profile_id": new(int64),
+				"rating": new(string),
+			}
+		}, map[string]any{"bloq_id": v["id"]})
+
+		if err != nil {
+			return nil, err
+		}
+
+        for _, r := range result.Rows {
+            r["profile"]  = fmt.Sprintf("%s/account/%d", api, *r["profile_id"].(*int64))
+            delete(r, "profile_id")
+        }
+
+        v["ratings"] = result.Rows
+	}
+
+	for _, i := range result.Rows {
+		i["url"] = fmt.Sprintf("%s/bloq/%d", api, *i["id"].(*int64))
+	}
+
+	status := http.StatusOK
+	msg := ""
+	if err != nil {
+		status = http.StatusInternalServerError
+		msg = err.Error()
+	}
+
+	return &rest.Resource{
+		Models:  result.Rows,
+		Status:  uint16(status),
+		Message: msg,
+	}, err
 }
 
 func (BloqHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {

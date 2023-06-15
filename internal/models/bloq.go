@@ -114,7 +114,7 @@ func (m BloqHandler) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTS
 		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
 		ctx := "https://schema.org/"
-		typ := "Person"
+		typ := "Product"
 		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "" && (r.URL.Path != "/account/@")) {
 			if len(resources.Models) == 0 {
 				return &mux.HttpError{

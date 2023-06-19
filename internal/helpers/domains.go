@@ -6,7 +6,8 @@ import (
 	"net/url"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
-	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	"github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 )
 
 const (
@@ -87,21 +88,21 @@ func CheckOriginHeader(h *http.Header, r *http.Request) (uint32, error) {
 	uri, err := url.ParseRequestURI(o)
 
 	if err != nil {
-		return http.StatusForbidden, &bloqs_http.HttpError{
+		return http.StatusForbidden, &mux.HttpError{
 			Body:   fmt.Sprintf("the `Origin` HTTP header has unparsable value `%s`:\t%s", o, err),
 			Status: http.StatusForbidden,
 		}
 	}
 
 	if err := ValidateDomain(uri.Hostname()); err != nil {
-		return http.StatusForbidden, &bloqs_http.HttpError{
+		return http.StatusForbidden, &mux.HttpError{
 			Body:   fmt.Sprintf("the `Origin` HTTP header its forbidden:\t%s", err),
 			Status: http.StatusForbidden,
 		}
 	} else {
 		if GetDomainsType() == DOMAINS_WHITELIST {
 			h.Set("Access-Control-Allow-Origin", uri.String())
-			bloqs_http.Append(h, "Vary", "Origin")
+			helpers.Append(h, "Vary", "Origin")
 		} else {
 			h.Set("Access-Control-Allow-Origin", "*")
 		}

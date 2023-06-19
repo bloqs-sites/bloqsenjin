@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bloqs-sites/bloqsenjin/internal/auth"
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 )
@@ -171,10 +171,10 @@ func (m BloqHandler) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTS
 
 		return nil
 	case http.MethodOptions:
-		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
 		h.Set("Access-Control-Allow-Credentials", "true")
-		mux.Append(&h, "Access-Control-Allow-Headers", "Authorization")
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Headers", "Authorization")
 		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
 		h.Set("Access-Control-Max-Age", "0")
 		return err
@@ -200,12 +200,12 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 	)
 
 	ct := r.Header.Get("Content-Type")
-	if strings.HasPrefix(ct, mux.FORM_DATA) {
+	if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -223,7 +223,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 	} else {
 		status = http.StatusUnsupportedMediaType
 		h := w.Header()
-		mux.Append(&h, "Accept", mux.FORM_DATA)
+		bloqs_helpers.Append(&h, "Accept", bloqs_helpers.FORM_DATA)
 		return &rest.Created{
 			Status:  status,
 			Message: fmt.Sprintf("request has the usupported media type `%s`", ct),
@@ -246,7 +246,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 		}, nil
 	}
 
-	tk, err := mux.ExtractToken(w, r)
+	tk, err := bloqs_helpers.ExtractToken(w, r)
 
 	if err != nil {
 		return nil, err
@@ -258,7 +258,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 		return nil, err
 	}
 
-	permission := bloqs_auth.CREATE_ACCOUNT
+	permission := bloqs_auth.CREATE_PROFILE
 	v, err := a.Validate(r.Context(), &proto.Token{
 		Jwt:         string(tk),
 		Permissions: (*uint64)(&permission),
@@ -268,7 +268,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 		return nil, err
 	}
 
-	claims := &auth.Claims{}
+	claims := &bloqs_auth.Claims{}
 	claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
 	if err != nil {
 		return nil, err
@@ -296,7 +296,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 		}
 	}
 
-	result, err := s.DBH.Insert(r.Context(), "bloq", []map[string]string{
+	result, err := s.DBH.Insert(r.Context(), "bloq", []map[string]any{
 		{
 			"name":                  name,
 			"description":           description,
@@ -315,7 +315,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 
 	id := strconv.Itoa(int(*result.LastID))
 
-	_, err = s.DBH.Insert(r.Context(), "bloq_image", []map[string]string{
+	_, err = s.DBH.Insert(r.Context(), "bloq_image", []map[string]any{
 		{
 			"bloq_id": id,
 			"image":   image,
@@ -333,9 +333,9 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 	}
 
 	if len(keywords) != 0 {
-		keywords_inserts := make([]map[string]string, 0, len(keywords))
+		keywords_inserts := make([]map[string]any, 0, len(keywords))
 		for _, keyword := range keywords {
-			keywords_inserts = append(keywords_inserts, map[string]string{
+			keywords_inserts = append(keywords_inserts, map[string]any{
 				"bloq_id": id,
 				"keyword": keyword,
 			})
@@ -399,8 +399,8 @@ func (BloqHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 
 		result, err = s.DBH.Select(r.Context(), "bloq_rating", func() map[string]any {
 			return map[string]any{
-                "profile_id": new(int64),
-				"rating": new(string),
+				"profile_id": new(int64),
+				"rating":     new(string),
 			}
 		}, map[string]any{"bloq_id": v["id"]})
 
@@ -408,12 +408,12 @@ func (BloqHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 			return nil, err
 		}
 
-        for _, r := range result.Rows {
-            r["profile"]  = fmt.Sprintf("%s/account/%d", api, *r["profile_id"].(*int64))
-            delete(r, "profile_id")
-        }
+		for _, r := range result.Rows {
+			r["profile"] = fmt.Sprintf("%s/account/%d", api, *r["profile_id"].(*int64))
+			delete(r, "profile_id")
+		}
 
-        v["ratings"] = result.Rows
+		v["ratings"] = result.Rows
 	}
 
 	for _, i := range result.Rows {
@@ -440,17 +440,4 @@ func (BloqHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (
 
 func (BloqHandler) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
 	return nil, nil
-}
-
-func (h *BloqHandler) MapGenerator() func() map[string]any {
-	return func() map[string]any {
-		m := make(map[string]any)
-		m["id"] = new(int64)
-		m["name"] = new(string)
-		m["description"] = new(string)
-		m["category"] = new(int64)
-		m["hasAdultConsideration"] = new(bool)
-		m["image"] = new(*string)
-		return m
-	}
 }

@@ -1,4 +1,4 @@
-package http
+package helpers
 
 import (
 	"fmt"
@@ -7,26 +7,16 @@ import (
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 )
 
 const (
-	PLAIN                 = "text/plain"
-	X_WWW_FORM_URLENCODED = "application/x-www-form-urlencoded"
-	FORM_DATA             = "multipart/form-data"
-	GRPC                  = "application/grpc"
-
 	//JWT_COOKIE = "__Host-bloqs-auth"
 	JWT_COOKIE = "_Secure-bloqs-auth"
-
-	BEARER_PREFIX = "Bearer"
 )
 
-func GetQuery() string {
-	return conf.MustGetConfOrDefault("type", "auth", "authTypeQueryParam")
-}
-
 func SetToken(w http.ResponseWriter, r *http.Request, jwt string) error {
-	exp := conf.MustGetConfOrDefault(900000, "auth", "token", "exp")
+	exp := conf.MustGetConfOrDefault[float64](900000, "auth", "token", "exp")
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     JWT_COOKIE,
@@ -50,7 +40,7 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error
 		header := r.Header.Get("Authorization")
 
 		if header == "" {
-			return nil, &HttpError{
+			return nil, &mux.HttpError{
 				Body:   fmt.Sprintf("HTTP Cookie `%s` and/or `Authorization` HTTP Header is missing", JWT_COOKIE),
 				Status: http.StatusUnauthorized,
 			}
@@ -59,7 +49,7 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error
 		bearerToken := strings.Split(header, " ")
 
 		if len(bearerToken) != 2 || bearerToken[0] != BEARER_PREFIX {
-			return nil, &HttpError{
+			return nil, &mux.HttpError{
 				Body:   "`Authorization` HTTP Header does not have a Bearer token",
 				Status: http.StatusUnauthorized,
 			}
@@ -67,7 +57,7 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error
 
 		return []byte(bearerToken[1]), nil
 	} else if err != nil {
-		err = &HttpError{Body: "", Status: http.StatusInternalServerError}
+		err = &mux.HttpError{Body: "", Status: http.StatusInternalServerError}
 		return
 	}
 
@@ -77,22 +67,22 @@ func ExtractToken(w http.ResponseWriter, r *http.Request) (jwt []byte, err error
 
 	// TODO: needs to look if the status codes used are the best for the situations.
 	if err = cookie.Valid(); err != nil {
-		err = &HttpError{Body: fmt.Sprintf("invalid HTTP Cookie:\t %v", err), Status: http.StatusBadRequest}
+		err = &mux.HttpError{Body: fmt.Sprintf("invalid HTTP Cookie:\t %v", err), Status: http.StatusBadRequest}
 		goto revocation
 	}
 
 	if i := cookie.MaxAge; i <= 0 || i > exp {
-		err = &HttpError{Body: "the HTTP Cookie is expired", Status: http.StatusBadRequest}
+		err = &mux.HttpError{Body: "the HTTP Cookie is expired", Status: http.StatusBadRequest}
 		goto revocation
 	}
 
 	if cookie.Expires.IsZero() {
-		err = &HttpError{Body: "the HTTP Cookie is expired", Status: http.StatusBadRequest}
+		err = &mux.HttpError{Body: "the HTTP Cookie is expired", Status: http.StatusBadRequest}
 		goto revocation
 	}
 
 	if !cookie.Secure || !cookie.HttpOnly {
-		// err = &HttpError{Body: "", Status: http.}
+		// err = &mux.HttpError{Body: "", Status: http.}
 		goto revocation
 	}
 
@@ -102,7 +92,7 @@ revocation:
 	revokeCookie(cookie, w)
 
 	if err == nil {
-		err = &HttpError{Body: "", Status: http.StatusUnauthorized}
+		err = &mux.HttpError{Body: "", Status: http.StatusUnauthorized}
 	}
 	return
 }

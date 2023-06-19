@@ -110,7 +110,7 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 	return
 }
 
-func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]string) (db.Result, error) {
+func (dbh *MySQL) Insert(ctx context.Context, table string, rows []map[string]any) (db.Result, error) {
 	if len(rows) < 1 {
 		return db.Result{
 			LastID: nil,
@@ -272,6 +272,16 @@ func (dbh *MySQL) CreateViews(ctx context.Context, ts []db.View) error {
 			t.Name, t.Select))
 
 		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (dbh MySQL) DropTables(ctx context.Context, tables []db.Table) error {
+	for _, i := range tables {
+		if _, err := dbh.conn.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`;", i.Name)); err != nil {
 			return err
 		}
 	}

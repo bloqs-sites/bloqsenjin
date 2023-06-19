@@ -22,18 +22,18 @@ type Mapper interface {
 	CreateTable() []Table
 	CreateIndexes() []Index
 	CreateViews() []View
-	MapGenerator() func() map[string]any
 }
 
 type DataManipulater interface {
 	Select(ctx context.Context, table string, columns func() map[string]any, where map[string]any) (Result, error)
-	Insert(ctx context.Context, table string, rows []map[string]string) (Result, error)
+	Insert(ctx context.Context, table string, rows []map[string]any) (Result, error)
 	Update(ctx context.Context, table string, assignments map[string]any, conditions map[string]any) error
 	Delete(ctx context.Context, table string, conditions map[string]any) error
 
 	CreateTables(context.Context, []Table) error
 	CreateIndexes(context.Context, []Index) error
 	CreateViews(context.Context, []View) error
+	DropTables(context.Context, []Table) error
 }
 
 type Result struct {

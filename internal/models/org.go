@@ -9,181 +9,81 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bloqs-sites/bloqsenjin/internal/auth"
-	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 )
 
-type Account struct {
+type Org struct {
 }
 
-func (Account) Table() string {
-	return "account"
+func (Org) Table() string {
+	return "org"
 }
 
-func (Account) CreateTable() []db.Table {
+func (Org) CreateTable() []db.Table {
 	return []db.Table{
 		{
-			Name: "account",
+			Name: "org",
 			Columns: []string{
 				"`id` INT UNSIGNED AUTO_INCREMENT",
 				"`name` VARCHAR(80) NOT NULL",
-				"`hasAdultConsideration` BOOL DEFAULT 0",
-				"`image` VARCHAR(254) DEFAULT NULL",
+				"`description` VARCHAR(80) NOT NULL",
+				"`url` VARCHAR(255) NOT NULL",
+				"`logo` VARCHAR(255) NOT NULL",
+				"`email` VARCHAR(320) DEFAULT NULL",
+				"`founder` INT UNSIGNED NOT NULL",
+				"`foudingDate` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
 				"PRIMARY KEY(`id`)",
 			},
 		},
 		{
-			Name: "credential_accounts",
+			Name: "org_members",
 			Columns: []string{
-				"`credential_id` VARCHAR(320) NOT NULL",
-				"`account_id` INT UNSIGNED NOT NULL",
-				"UNIQUE (`credential_id`, `account_id`)",
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`org_id` INT UNSIGNED NOT NULL",
+				"`profile_id` INT UNSIGNED NOT NULL",
+				"UNIQUE(`org_id`, `profile_id`)",
+				"PRIMARY KEY(`id`)",
 			},
 		},
 		{
-			Name: "account_likes",
+			Name: "org_languages",
 			Columns: []string{
-				"`account_id` INT UNSIGNED NOT NULL",
-				"`preference_id` INT UNSIGNED NOT NULL",
-				"`weight` FLOAT(6, 3) UNSIGNED NOT NULL",
-				"UNIQUE (`account_id`, `preference_id`)",
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`org_id` INT UNSIGNED NOT NULL",
+				"`language` VARCHAR(255) NOT NULL",
+				"PRIMARY KEY(`id`)",
+			},
+		},
+		{
+			Name: "org_ratings",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`org_id` INT UNSIGNED NOT NULL",
+				"`profile_id` INT UNSIGNED NOT NULL",
+				"`ratingValue` INT NOT NULL",
+				"`ratingExplanation` TEXT DEFAULT NULL",
+				"UNIQUE(`org_id`, `profile_id`)",
+				"PRIMARY KEY(`id`)",
 			},
 		},
 	}
 }
 
-func (Account) CreateIndexes() []db.Index {
+func (Org) CreateIndexes() []db.Index {
 	return nil
 }
 
-func (Account) CreateViews() []db.View {
+func (Org) CreateViews() []db.View {
 	return nil
 }
 
-func (m Account) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServer) error {
-	var (
-		status uint32
-
-		err error
-	)
-
-	h := w.Header()
-	_, err = helpers.CheckOriginHeader(&h, r)
-
-	switch r.Method {
-	case "":
-		fallthrough
-	case http.MethodGet:
-		if err != nil {
-			return err
-		}
-
-		resources, err := m.Read(w, r, s)
-
-		if err != nil {
-			return err
-		}
-
-		if resources == nil {
-			return &mux.HttpError{
-				Status: http.StatusNotFound,
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		encoder := json.NewEncoder(w)
-		ctx := "https://schema.org/"
-		typ := "Person"
-		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "" && (r.URL.Path != "/account/@")) {
-			if len(resources.Models) == 0 {
-				return &mux.HttpError{
-					Status: http.StatusNotFound,
-				}
-			} else {
-				resources.Models[0]["@context"] = ctx
-				resources.Models[0]["@type"] = typ
-				return encoder.Encode(resources.Models[0])
-			}
-		} else {
-			resources.Models = append([]db.JSON{
-				{
-					"@context": ctx,
-					"@type":    typ,
-				},
-			}, resources.Models...)
-			return encoder.Encode(resources.Models)
-		}
-	case http.MethodPost:
-		if err != nil {
-			return err
-		}
-
-		created, err := m.Create(w, r, s)
-
-		if err != nil {
-			return err
-		}
-
-		if created == nil {
-			return &mux.HttpError{
-				Status: http.StatusInternalServerError,
-			}
-		}
-
-		var id *string = nil
-
-		domain := conf.MustGetConf("REST", "domain").(string)
-
-		if created.LastID != nil {
-			id_str := strconv.Itoa(int(*created.LastID))
-			id = &id_str
-		}
-
-		if id != nil {
-			w.Header().Set("Location", fmt.Sprintf("%s/%s/%s", domain, m.Table(), *id))
-		}
-		if w.Header().Get("Content-Type") == "" {
-			w.Header().Set("Content-Type", "text/plain")
-		}
-		w.WriteHeader(int(created.Status))
-		w.Write([]byte(created.Message))
-
-		return nil
-	case http.MethodOptions:
-		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
-		h.Set("Access-Control-Allow-Credentials", "true")
-		mux.Append(&h, "Access-Control-Allow-Headers", "Authorization")
-		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
-		h.Set("Access-Control-Max-Age", "0")
-		return err
-	default:
-		status = http.StatusMethodNotAllowed
-		return &mux.HttpError{
-			Body:   "",
-			Status: uint16(status),
-		}
-	}
-}
-
-func (Account) MapGenerator() func() map[string]any {
-	return func() map[string]any {
-		m := make(map[string]any)
-		m["id"] = new(int64)
-		m["name"] = new(string)
-		m["hasAdultConsideration"] = new(bool)
-		m["image"] = new(string)
-		return m
-	}
-}
-
-func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
+func (Org) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
 	var (
 		status uint16 = http.StatusInternalServerError
 
@@ -194,12 +94,12 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	)
 
 	ct := r.Header.Get("Content-Type")
-	if strings.HasPrefix(ct, mux.X_WWW_FORM_URLENCODED) {
+	if strings.HasPrefix(ct, bloqs_helpers.X_WWW_FORM_URLENCODED) {
 		if err := r.ParseForm(); err != nil {
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -212,12 +112,12 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 			hasAdultConsideration = "1"
 		}
 		likes = r.Form["likes"]
-	} else if strings.HasPrefix(ct, mux.FORM_DATA) {
+	} else if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
 		if err := r.ParseMultipartForm(0x400); err != nil {
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -233,8 +133,8 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	} else {
 		status = http.StatusUnsupportedMediaType
 		h := w.Header()
-		mux.Append(&h, "Accept", mux.X_WWW_FORM_URLENCODED)
-		mux.Append(&h, "Accept", mux.FORM_DATA)
+		bloqs_helpers.Append(&h, "Accept", bloqs_helpers.X_WWW_FORM_URLENCODED)
+		bloqs_helpers.Append(&h, "Accept", bloqs_helpers.FORM_DATA)
 		return &rest.Created{
 			Status:  status,
 			Message: fmt.Sprintf("request has the usupported media type `%s`", ct),
@@ -249,7 +149,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}, nil
 	}
 
-	tk, err := mux.ExtractToken(w, r)
+	tk, err := bloqs_helpers.ExtractToken(w, r)
 
 	if err != nil {
 		return nil, err
@@ -261,7 +161,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		return nil, err
 	}
 
-	permission := bloqs_auth.CREATE_ACCOUNT
+	permission := bloqs_auth.CREATE_PROFILE
 	v, err := a.Validate(r.Context(), &proto.Token{
 		Jwt:         string(tk),
 		Permissions: (*uint64)(&permission),
@@ -271,7 +171,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		return nil, err
 	}
 
-	claims := &auth.Claims{}
+	claims := &bloqs_auth.Claims{}
 	claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
 	if err != nil {
 		return nil, err
@@ -322,7 +222,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}
 	}
 
-	result, err = s.DBH.Insert(r.Context(), "account", []map[string]string{
+	result, err = s.DBH.Insert(r.Context(), "account", []map[string]any{
 		{
 			"name":                  name,
 			"hasAdultConsideration": hasAdultConsideration,
@@ -340,7 +240,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 
 	id := strconv.Itoa(int(*result.LastID))
 
-	_, err = s.DBH.Insert(r.Context(), "credential_accounts", []map[string]string{
+	_, err = s.DBH.Insert(r.Context(), "credential_accounts", []map[string]any{
 		{
 			"credential_id": claims.Payload.Client,
 			"account_id":    id,
@@ -358,10 +258,10 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}
 
 	if len(likes) != 0 {
-		likes_inserts := make([]map[string]string, 0, len(likes))
+		likes_inserts := make([]map[string]any, 0, len(likes))
 		weight := strconv.Itoa(int(float64(100 / len(likes))))
 		for _, like := range likes {
-			likes_inserts = append(likes_inserts, map[string]string{
+			likes_inserts = append(likes_inserts, map[string]any{
 				"account_id":    id,
 				"preference_id": like,
 				"weight":        weight,
@@ -422,7 +322,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 						fmt.Printf("%v\n", err)
 					}
 				} else {
-					if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]string{
+					if _, err := s.DBH.Insert(r.Context(), "shares", []map[string]any{
 						{
 							"preference1_id": strconv.Itoa(min),
 							"preference2_id": strconv.Itoa(max),
@@ -443,7 +343,7 @@ func (Account) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	}, nil
 }
 
-func (Account) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
 	id := s.Seg(0)
 
 	you := conf.MustGetConfOrDefault("@", "REST", "myself")
@@ -461,13 +361,13 @@ func (Account) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 			return nil, err
 		}
 
-		tk, err := mux.ExtractToken(w, r)
+		tk, err := bloqs_helpers.ExtractToken(w, r)
 
 		if err != nil {
 			return nil, err
 		}
 
-		p := bloqs_auth.READ_ACCOUNT
+		p := bloqs_auth.READ_PROFILE
 		v, err := a.Validate(r.Context(), &proto.Token{
 			Jwt:         string(tk),
 			Permissions: (*uint64)(&p),
@@ -489,7 +389,7 @@ func (Account) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 			}
 		}
 
-		claims := &auth.Claims{}
+		claims := &bloqs_auth.Claims{}
 		claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
 		if err != nil {
 			return nil, err
@@ -599,10 +499,10 @@ func (Account) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 	}, err
 }
 
-func (Account) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+func (Org) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
 	return nil, nil
 }
 
-func (Account) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+func (Org) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
 	return nil, nil
 }

@@ -16,6 +16,7 @@ type Resource struct {
 	Models  []db.JSON `json:"models"`
 	Status  uint16    `json:"status"`
 	Message string    `json:"message"`
+	Unique  bool      `json:"unique"`
 }
 
 type CRUDer interface {
@@ -26,8 +27,6 @@ type CRUDer interface {
 }
 
 type Handler interface {
-	Handle(http.ResponseWriter, *http.Request, RESTServer) error
-
 	CRUDer
 	db.Mapper
 	Table() string

@@ -1,15 +1,15 @@
 {
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "public": true,
-    "rewrites": [
-        {
-            "source": "/api/auth/:path*",
-            "destination": "/api/auth.go"
-        },
-        {
-            "source": "/api/rest/(.*)",
-            "destination": "/api/rest.go"
-        }
-    ],
-    "trailingSlash": false
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "public": true,
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "/api/auth.go"
+    },
+    {
+      "source": "/api/rest/(.*)",
+      "destination": "/api/rest.go"
+    }
+  ],
+  "trailingSlash": false
 }

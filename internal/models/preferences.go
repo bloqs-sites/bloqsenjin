@@ -16,6 +16,7 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/redis/go-redis/v9"
@@ -33,12 +34,12 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 	)
 
 	ct := r.Header.Get("Content-Type")
-	if strings.HasPrefix(ct, mux.X_WWW_FORM_URLENCODED) {
+	if strings.HasPrefix(ct, bloqs_helpers.X_WWW_FORM_URLENCODED) {
 		if err := r.ParseForm(); err != nil {
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -47,12 +48,12 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 
 		name = r.FormValue("name")
 		description = r.FormValue("description")
-	} else if strings.HasPrefix(ct, mux.FORM_DATA) {
+	} else if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
 		if err := r.ParseMultipartForm(0x400); err != nil {
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", mux.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -64,8 +65,8 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 	} else {
 		status = http.StatusUnsupportedMediaType
 		h := w.Header()
-		mux.Append(&h, "Accept", mux.X_WWW_FORM_URLENCODED)
-		mux.Append(&h, "Accept", mux.FORM_DATA)
+		bloqs_helpers.Append(&h, "Accept", bloqs_helpers.X_WWW_FORM_URLENCODED)
+		bloqs_helpers.Append(&h, "Accept", bloqs_helpers.FORM_DATA)
 		return &rest.Created{
 			Status:  status,
 			Message: fmt.Sprintf("request has the usupported media type `%s`", ct),
@@ -94,7 +95,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		return nil, err
 	}
 
-	tk, err := mux.ExtractToken(w, r)
+	tk, err := bloqs_helpers.ExtractToken(w, r)
 
 	if err != nil {
 		return nil, err
@@ -139,7 +140,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 	}
 
 	var result db.Result
-	result, err = s.DBH.Insert(r.Context(), "preference", []map[string]string{
+	result, err = s.DBH.Insert(r.Context(), "preference", []map[string]any{
 		{
 			"name":        name,
 			"description": description,
@@ -154,7 +155,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		}
 	}
 
-	shares := make([]map[string]string, 0, len(preferences.Rows))
+	shares := make([]map[string]any, 0, len(preferences.Rows))
 	res_id := int(*result.LastID)
 	for _, p := range preferences.Rows {
 		id := int(*p["id"].(*int64))
@@ -167,7 +168,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 			id2 = strconv.Itoa(id)
 		}
 
-		shares = append(shares, map[string]string{
+		shares = append(shares, map[string]any{
 			"preference1_id": id1,
 			"preference2_id": id2,
 			"weight":         "0",
@@ -329,10 +330,10 @@ func (p PreferenceHandler) Handle(w http.ResponseWriter, r *http.Request, s rest
 
 		return nil
 	case http.MethodOptions:
-		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		mux.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
 		h.Set("Access-Control-Allow-Credentials", "true")
-		mux.Append(&h, "Access-Control-Allow-Headers", "Authorization")
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Headers", "Authorization")
 		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
 		h.Set("Access-Control-Max-Age", "0")
 		return err
@@ -378,16 +379,6 @@ func (h *PreferenceHandler) CreateIndexes() []db.Index {
 
 func (h *PreferenceHandler) CreateViews() []db.View {
 	return []db.View{}
-}
-
-func (p PreferenceHandler) MapGenerator() func() map[string]any {
-	return func() map[string]any {
-		m := make(map[string]any)
-		m["id"] = new(int64)
-		m["description"] = new(string)
-		m["name"] = new(string)
-		return m
-	}
 }
 
 func (p PreferenceHandler) Table() string {

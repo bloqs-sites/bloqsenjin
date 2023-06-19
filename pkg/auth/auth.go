@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/bloqs-sites/bloqsenjin/proto"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Token string
@@ -25,6 +26,11 @@ type Payload struct {
 	Permissions Permission `json:"permissions"`
 	Super       bool       `json:"is_super"`
 	Type        AuthType   `json:"type"`
+}
+
+type Claims struct {
+	Payload
+	jwt.RegisteredClaims
 }
 
 type Tokener interface {

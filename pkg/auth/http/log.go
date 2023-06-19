@@ -11,7 +11,8 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
-	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	p "google.golang.org/protobuf/proto"
 
@@ -30,7 +31,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 	h := w.Header()
 	status, err = helpers.CheckOriginHeader(&h, r)
 
-	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
+	types_route := conf.MustGetConfOrDefault("/types/", "auth", "paths", "types")
 
 	switch r.Method {
 	case http.MethodPost: // log in
@@ -45,23 +46,23 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 		var creds *proto.Credentials
 
 		ct := r.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
+		if strings.HasPrefix(ct, bloqs_helpers.X_WWW_FORM_URLENCODED) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err), &status),
 				}
 				goto respond
 			}
-		} else if strings.HasPrefix(ct, bloqs_http.FORM_DATA) {
+		} else if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
 			if err = r.ParseMultipartForm(32 << 20); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.FORM_DATA, err), &status),
 				}
 				goto respond
 			}
-		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
+		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_helpers.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
@@ -73,7 +74,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 				if err := p.Unmarshal(buf, ask); err != nil {
 					status = http.StatusBadRequest
 					v = &proto.TokenValidation{
-						Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
+						Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.GRPC, err), &status),
 					}
 					goto respond
 				}
@@ -81,16 +82,16 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 			}
 		} else {
 			status = http.StatusUnsupportedMediaType
-			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
-			bloqs_http.Append(&h, "Accept", bloqs_http.FORM_DATA)
-			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.X_WWW_FORM_URLENCODED)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.FORM_DATA)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.GRPC)
 			v = &proto.TokenValidation{
 				Validation: auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
 			}
 			goto respond
 		}
 
-		t := bloqs_http.GetQuery()
+		t := conf.MustGetConfOrDefault("type", "auth", "queryParams", "type")
 		if !r.URL.Query().Has(t) {
 			status = http.StatusBadRequest
 			v = &proto.TokenValidation{
@@ -167,7 +168,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 		validation, err = a.IsSuper(r.Context(), creds)
 
 		if ask == nil {
-			perm := conf.MustGetConfOrDefault("permissions", "auth", "permissionsQueryParam")
+			perm := conf.MustGetConfOrDefault("permissions", "auth", "queryParams", "permissions")
 			permissions := auth.DEFAULT_PERMISSIONS
 			list := auth.GetPermissionsList(validation.Valid)
 			if r.URL.Query().Has(perm) {
@@ -196,7 +197,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 
 		v, err = a.LogIn(r.Context(), ask)
 		if err == nil {
-			bloqs_http.SetToken(w, r, v.Token.Jwt)
+			bloqs_helpers.SetToken(w, r, v.Token.Jwt)
 		}
 
 		goto respond
@@ -211,7 +212,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 		var tk *proto.Token
 
 		ct := r.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, bloqs_http.PLAIN) {
+		if strings.HasPrefix(ct, bloqs_helpers.PLAIN) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
@@ -223,11 +224,11 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 					Jwt: string(buf),
 				}
 			}
-		} else if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
+		} else if strings.HasPrefix(ct, bloqs_helpers.X_WWW_FORM_URLENCODED) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err), &status),
 				}
 				goto respond
 			}
@@ -235,11 +236,11 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 			tk = &proto.Token{
 				Jwt: r.FormValue("token"),
 			}
-		} else if strings.HasPrefix(ct, bloqs_http.FORM_DATA) {
+		} else if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
 			if err = r.ParseMultipartForm(32 << 20); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
-					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.FORM_DATA, err), &status),
+					Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.FORM_DATA, err), &status),
 				}
 				goto respond
 			}
@@ -247,7 +248,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 			tk = &proto.Token{
 				Jwt: r.FormValue("token"),
 			}
-		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
+		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_helpers.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = &proto.TokenValidation{
@@ -259,7 +260,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 				if err := p.Unmarshal(buf, tk); err != nil {
 					status = http.StatusBadRequest
 					v = &proto.TokenValidation{
-						Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status),
+						Validation: auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.GRPC, err), &status),
 					}
 					goto respond
 				}
@@ -267,10 +268,10 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 			}
 		} else {
 			status = http.StatusUnsupportedMediaType
-			bloqs_http.Append(&h, "Accept", bloqs_http.PLAIN)
-			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
-			bloqs_http.Append(&h, "Accept", bloqs_http.FORM_DATA)
-			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.PLAIN)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.X_WWW_FORM_URLENCODED)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.FORM_DATA)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.GRPC)
 			v = &proto.TokenValidation{
 				Validation: auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status),
 			}
@@ -279,11 +280,11 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 
 		if (tk == nil) || len(tk.Jwt) <= 0 {
 			var jwt []byte
-			jwt, err = bloqs_http.ExtractToken(w, r)
+			jwt, err = bloqs_helpers.ExtractToken(w, r)
 
 			if err != nil {
 				status = http.StatusInternalServerError
-				if err, ok := err.(*bloqs_http.HttpError); ok {
+				if err, ok := err.(*mux.HttpError); ok {
 					status = uint32(err.Status)
 				}
 
@@ -316,12 +317,12 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 
 		goto respond
 	case http.MethodOptions:
-		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)
-		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
 		h.Set("Access-Control-Allow-Credentials", "true")
-		//bloqs_http.Append(&h, "Access-Control-Allow-Headers", "")
-		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
+		//bloqs_helpers.Append(&h, "Access-Control-Allow-Headers", "")
+		//bloqs_helpers.Append(&h, "Access-Control-Expose-Headers", "")
 		//h.Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
 		h.Set("Access-Control-Max-Age", "0")
 		var msg string
@@ -385,7 +386,7 @@ respond:
 }
 
 func redirect(r *http.Request) *string {
-	redirect := conf.MustGetConfOrDefault("redirect", "auth", "redirectQueryParam")
+	redirect := conf.MustGetConfOrDefault("redirect", "auth", "queryParams", "redirect")
 	location, err := url.Parse(r.URL.Query().Get(redirect))
 
 	if err != nil || r.URL.Query().Get(redirect) == "" {

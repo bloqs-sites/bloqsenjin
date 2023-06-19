@@ -14,7 +14,8 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
-	bloqs_http "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
+	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/proto"
 	"github.com/redis/go-redis/v9"
 	p "google.golang.org/protobuf/proto"
@@ -38,7 +39,7 @@ func SignRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 	h := w.Header()
 	status, err = helpers.CheckOriginHeader(&h, r)
 
-	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
+	types_route := conf.MustGetConfOrDefault("/types", "auth", "paths", "types")
 
 	switch r.Method {
 	case http.MethodPost:
@@ -50,13 +51,13 @@ func SignRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 		var credentials *proto.Credentials
 
 		ct := r.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, bloqs_http.X_WWW_FORM_URLENCODED) {
+		if strings.HasPrefix(ct, bloqs_helpers.X_WWW_FORM_URLENCODED) {
 			if err = r.ParseForm(); err != nil {
 				status = http.StatusBadRequest
-				v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.X_WWW_FORM_URLENCODED, err), &status)
+				v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err), &status)
 				goto respond
 			}
-		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_http.GRPC) {
+		} else if r.ProtoMajor == 2 && strings.HasPrefix(ct, bloqs_helpers.GRPC) {
 			if buf, err := io.ReadAll(r.Body); err != nil {
 				status = http.StatusBadRequest
 				v = bloqs_auth.Invalid(fmt.Sprintf("could not read the HTTP request body:\t %s", err), &status)
@@ -65,20 +66,20 @@ func SignRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 				credentials = new(proto.Credentials)
 				if err := p.Unmarshal(buf, credentials); err != nil {
 					status = http.StatusBadRequest
-					v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_http.GRPC, err), &status)
+					v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.GRPC, err), &status)
 					goto respond
 				}
 				//s.ServeHTTP(w, r)
 			}
 		} else {
 			status = http.StatusUnsupportedMediaType
-			bloqs_http.Append(&h, "Accept", bloqs_http.X_WWW_FORM_URLENCODED)
-			bloqs_http.Append(&h, "Accept", bloqs_http.GRPC)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.X_WWW_FORM_URLENCODED)
+			bloqs_helpers.Append(&h, "Accept", bloqs_helpers.GRPC)
 			v = bloqs_auth.Invalid(fmt.Sprintf("request has the usupported media type `%s`", ct), &status)
 			goto respond
 		}
 
-		t := bloqs_http.GetQuery()
+		t := conf.MustGetConfOrDefault("type", "auth", "queryParams", "type")
 		if !r.URL.Query().Has(t) {
 			status = http.StatusBadRequest
 			v = bloqs_auth.Invalid(fmt.Sprintf("the HTTP query parameter `%s` that specifies the method to use for authentication/authorization was not defined. Define it with one of the supported values (.%s).\n", t, types_route), &status)
@@ -151,13 +152,13 @@ func SignRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 		}
 
 		var jwt []byte
-		jwt, err = bloqs_http.ExtractToken(w, r)
+		jwt, err = bloqs_helpers.ExtractToken(w, r)
 		token = &proto.Token{
 			Jwt: string(jwt),
 		}
 
 		if err != nil {
-			if err, ok := err.(*bloqs_http.HttpError); ok {
+			if err, ok := err.(*mux.HttpError); ok {
 				*v.HttpStatusCode = uint32(err.Status)
 			} else {
 				*v.HttpStatusCode = http.StatusInternalServerError
@@ -172,17 +173,17 @@ func SignRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 			goto respond
 		}
 
-		switch r.URL.Query().Get(bloqs_http.GetQuery()) {
+		switch r.URL.Query().Get(conf.MustGetConfOrDefault("type", "auth", "queryParams", "type")) {
 		case "basic":
 			v, err = a.SignOut(r.Context(), token)
 		}
 	case http.MethodOptions:
-		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)
-		bloqs_http.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodDelete)
+		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
 		h.Set("Access-Control-Allow-Credentials", "true")
-		//bloqs_http.Append(&h, "Access-Control-Allow-Headers", "")
-		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
+		//bloqs_helpers.Append(&h, "Access-Control-Allow-Headers", "")
+		//bloqs_helpers.Append(&h, "Access-Control-Expose-Headers", "")
 		//h.Set("Access-Control-Max-Age", fmt.Sprint(time.Hour*24/time.Second))
 		h.Set("Access-Control-Max-Age", "0")
 		var msg string

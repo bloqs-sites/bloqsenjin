@@ -17,7 +17,7 @@ func (s *AuthClient) Validate(ctx context.Context, in *proto.Token) (*proto.Vali
 	if err != nil {
 		return nil, err
 	}
-	path, err := conf.GetConf("auth", "verifyPath")
+	path, err := conf.GetConf("auth", "paths", "verify")
 	if err != nil {
 		return nil, err
 	}

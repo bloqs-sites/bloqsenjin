@@ -55,9 +55,9 @@ func (t *BloqsTokener) GenToken(ctx context.Context, p *auth.Payload) (tokenstr 
 		str      string
 		auth_api = conf.MustGetConfOrDefault("", "auth", "domain")
 		rest_api = conf.MustGetConfOrDefault("", "REST", "domain")
-		token    = jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{
-			*p,
-			jwt.RegisteredClaims{
+		token    = jwt.NewWithClaims(jwt.SigningMethodHS512, auth.Claims{
+			Payload: *p,
+			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
 				NotBefore: jwt.NewNumericDate(time.Now()),
@@ -85,7 +85,7 @@ func (t *BloqsTokener) VerifyToken(ctx context.Context, tk auth.Token, p auth.Pe
 		}
 	}
 
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+	if claims, ok := token.Claims.(*auth.Claims); ok && token.Valid {
 		if (claims.Payload.Permissions & p) == p {
 			return true, nil
 		} else {
@@ -119,7 +119,7 @@ func (t *BloqsTokener) RevokeToken(ctx context.Context, tk auth.Token) error {
 		return err
 	}
 
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+	if claims, ok := token.Claims.(*auth.Claims); ok && token.Valid {
 		sub := claims.Subject
 		key := fmt.Sprintf(jwt_prefix, sub)
 		return t.secrets.Delete(ctx, key)
@@ -140,7 +140,7 @@ func (t *BloqsTokener) ParseToken(ctx context.Context, tk auth.Token) (*jwt.Toke
 	auth_api := conf.MustGetConf("auth", "domain").(string)
 	rest_api := conf.MustGetConf("REST", "domain").(string)
 
-	token, err := jwt.ParseWithClaims(string(tk), &Claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
+	token, err := jwt.ParseWithClaims(string(tk), &auth.Claims{}, t.keyfunc(ctx), jwt.WithValidMethods([]string{
 		"HS256",
 		"HS384",
 		"HS512",

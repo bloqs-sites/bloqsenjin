@@ -13,7 +13,6 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/email"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,11 +22,6 @@ const (
 	id_type_table = "id-type"
 	failed_table  = "failed"
 )
-
-type Claims struct {
-	auth.Payload
-	jwt.RegisteredClaims
-}
 
 type BloqsAuther struct {
 	creds db.DataManipulater
@@ -126,11 +120,11 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 	log.Printf("%s took %v", "GenerateFromPassword", time.Since(u))
 
 	u = time.Now()
-	if _, err := a.creds.Insert(ctx, table, []map[string]string{
+	if _, err := a.creds.Insert(ctx, table, []map[string]any{
 		{
 			"identifier": c.Basic.Email,
-			"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
-			"secret":     string(hash),
+			"type":       auth.BASIC_EMAIL,
+			"secret":     hash,
 		},
 	}); err != nil {
 		return err

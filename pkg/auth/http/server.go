@@ -18,16 +18,16 @@ func Server(endpoint string) http.HandlerFunc {
 		// }
 	}
 
-	sign_route := conf.MustGetConfOrDefault("/sign", "auth", "signPath")
-	log_route := conf.MustGetConfOrDefault("/log", "auth", "logPath")
-	types_route := conf.MustGetConfOrDefault("/types", "auth", "typesPath")
+	sign_route := conf.MustGetConfOrDefault("/sign/", "auth", "paths", "sign")
+	log_route := conf.MustGetConfOrDefault("/log/", "auth", "paths", "log")
+	types_route := conf.MustGetConfOrDefault("/types/", "auth", "paths", "types")
 
 	r := mux.NewRouter(endpoint)
 	r.Route(sign_route, SignRoute)
 	r.Route(log_route, LogRoute)
 	r.Route(types_route, func(w http.ResponseWriter, r *http.Request, segs []string) {
 		// XXX
-		json.NewEncoder(w).Encode(conf.MustGetConfOrDefault([]any{}, "auth", "supported"))
+		json.NewEncoder(w).Encode(conf.MustGetConfOrDefault(map[string]bool{}, "auth", "supported"))
 	})
 
 	return r.ServeHTTP

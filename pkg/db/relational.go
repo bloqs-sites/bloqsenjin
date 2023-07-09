@@ -34,6 +34,8 @@ type DataManipulater interface {
 	CreateIndexes(context.Context, []Index) error
 	CreateViews(context.Context, []View) error
 	DropTables(context.Context, []Table) error
+
+	Close() error
 }
 
 type Result struct {

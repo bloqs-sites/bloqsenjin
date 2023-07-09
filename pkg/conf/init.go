@@ -14,7 +14,7 @@ var (
 
 const (
 	cnf_flag         = "bloqs-conf"
-	cnf_default_path = "./.bloqs.conf.json"
+	cnf_default_path = ""
 	cnf_usage        = ""
 	cnf_env_var      = "BLOQS_CONF"
 

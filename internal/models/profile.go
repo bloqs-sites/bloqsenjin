@@ -2,12 +2,13 @@ package models
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"mime/multipart"
 	"net/http"
+	uri "net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +21,6 @@ import (
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
-	"github.com/bloqs-sites/bloqsenjin/proto"
 )
 
 type Profile struct {
@@ -30,6 +30,10 @@ func (Profile) Table() string {
 	return "profile"
 }
 
+func (Profile) Type() string {
+	return "Person"
+}
+
 func (Profile) CreateTable() []db.Table {
 	return []db.Table{
 		{
@@ -37,7 +41,7 @@ func (Profile) CreateTable() []db.Table {
 			Columns: []string{
 				"`id` INT UNSIGNED AUTO_INCREMENT",
 				"`name` VARCHAR(80) NOT NULL",
-				"`description` VARCHAR(140) NOT NULL",
+				"`description` VARCHAR(140) DEFAULT NULL",
 				"`honorificPrefix` VARCHAR(80) DEFAULT NULL",
 				"`honorificSuffix` VARCHAR(80) DEFAULT NULL",
 				"`image` VARCHAR(254) DEFAULT NULL",
@@ -73,7 +77,7 @@ func (Profile) CreateTable() []db.Table {
 				"`id` INT UNSIGNED AUTO_INCREMENT",
 				"`profile_id` INT UNSIGNED NOT NULL",
 				"`preference_id` INT UNSIGNED NOT NULL",
-				"`weight` FLOAT(6, 3) UNSIGNED NOT NULL",
+				"`weight` FLOAT(7, 3) UNSIGNED NOT NULL",
 				"UNIQUE (`profile_id`, `preference_id`)",
 				"PRIMARY KEY(`id`)",
 			},
@@ -124,7 +128,7 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		likes                 []string = []string{}
 	)
 
-	nsfw := conf.MustGetConfOrDefault(false, "REST", "nsfw")
+	nsfw := conf.MustGetConfOrDefault(false, "REST", "NSFW")
 
 	ct := r.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
@@ -140,13 +144,19 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}
 
 		name = r.FormValue("name")
-		*description = r.FormValue("description")
-		*url = r.FormValue("url")
+		description_value := r.FormValue("description")
+		if description_value != "" {
+			description = &description_value
+		}
+		url_value := r.FormValue("url")
+		if url_value != "" {
+			url = &url_value
+		}
 
 		var err error
 		image, image_header, err = r.FormFile("image")
 
-		if err != nil {
+		if err != nil && !errors.Is(err, http.ErrMissingFile) {
 			return &rest.Created{
 					Status:  status,
 					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.FORM_DATA, err),
@@ -156,7 +166,9 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 				}
 		}
 
-		defer image.Close()
+		if image != nil {
+			defer image.Close()
+		}
 
 		if nsfw {
 			hasAdultConsideration = bloqs_helpers.FormValueTrue(r.FormValue("hasAdultConsideration"))
@@ -181,34 +193,37 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}, nil
 	}
 
-	if l := len(*description); l > 140 || l < 0 {
-		status = http.StatusUnprocessableEntity
-		return &rest.Created{
-			Status:  status,
-			Message: "`description` body field has to have a length between 0 and 140 characters",
-		}, nil
+	if description != nil {
+		if l := len(*description); l > 140 || l < 0 {
+			status = http.StatusUnprocessableEntity
+			return &rest.Created{
+				Status:  status,
+				Message: "`description` body field has to have a length between 0 and 140 characters",
+			}, nil
+		}
 	}
 
-	if l := len(*url); l > 255 || l < 0 {
-		status = http.StatusUnprocessableEntity
-		return &rest.Created{
-			Status:  status,
-			Message: "`url` body field has to have a length between 0 and 255 characters",
-		}, nil
+	if url != nil {
+		if _, err := uri.ParseRequestURI(*url); err != nil {
+			status = http.StatusUnprocessableEntity
+			return &rest.Created{
+					Status:  status,
+					Message: err.Error(),
+				}, &mux.HttpError{
+					Body:   err.Error(),
+					Status: status,
+				}
+		}
 	}
 
-	if ct := image_header.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/") {
-		status = http.StatusUnprocessableEntity
-		return &rest.Created{
-			Status:  status,
-			Message: "`image` it's not really a `image/*`",
-		}, nil
-	}
-
-	tk, err := bloqs_helpers.ExtractToken(w, r)
-
-	if err != nil {
-		return nil, err
+	if image_header != nil {
+		if ct := image_header.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/") {
+			status = http.StatusUnprocessableEntity
+			return &rest.Created{
+				Status:  status,
+				Message: "`image` it's not really a `image/*`",
+			}, nil
+		}
 	}
 
 	a, err := authSrv(r.Context())
@@ -217,42 +232,9 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		return nil, err
 	}
 
-	permission := bloqs_auth.CREATE_PROFILE
-	v, err := a.Validate(r.Context(), &proto.Token{
-		Jwt:         string(tk),
-		Permissions: (*uint64)(&permission),
-	})
-
+	claims, err := helpers.ValidateAndGetClaims(w, r, a, bloqs_auth.CREATE_PROFILE)
 	if err != nil {
 		return nil, err
-	}
-
-	claims := &bloqs_auth.Claims{}
-	claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(claims_str, claims)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !v.Valid {
-		msg := ""
-
-		if v.Message != nil {
-			msg = *v.Message
-		}
-
-		if v.HttpStatusCode != nil {
-			status = uint16(*v.HttpStatusCode)
-		}
-
-		return nil, &mux.HttpError{
-			Body:   msg,
-			Status: status,
-		}
 	}
 
 	var result db.Result
@@ -269,24 +251,26 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		}
 	}
 
-	max := conf.MustGetConfOrDefault(1, "REST", "max")
-	if len(result.Rows) >= max {
+	max := conf.MustGetConfOrDefault[float64](1, "REST", "profiles", "max")
+	if len(result.Rows) >= int(max) {
 		status = http.StatusForbidden
 		return nil, &mux.HttpError{
-			Body:   fmt.Sprintf("the maximum limit of this resource (%d) has reached.", max),
+			Body:   fmt.Sprintf("the maximum limit of this resource (%d) has reached.", int(max)),
 			Status: status,
 		}
 	}
 
-	result, err = s.DBH.Insert(r.Context(), "profile", []map[string]any{
-		{
-			"name":                  name,
-			"description":           description,
-			"image":                 image_header.Filename,
-			"url":                   url,
-			"hasAdultConsideration": hasAdultConsideration,
-		},
-	})
+	insert := map[string]any{
+		"name":                  name,
+		"description":           description,
+		"url":                   url,
+		"hasAdultConsideration": hasAdultConsideration,
+	}
+	if image_header != nil {
+		insert["image"] = image_header.Filename
+	}
+
+	result, err = s.DBH.Insert(r.Context(), "profile", []map[string]any{insert})
 
 	if err != nil {
 		status = http.StatusInternalServerError
@@ -414,6 +398,7 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 
 func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
 	id := s.Seg(0)
+	second := s.Seg(1)
 
 	you := conf.MustGetConfOrDefault("@", "REST", "myself")
 	api := conf.MustGetConf("REST", "domain").(string)
@@ -424,84 +409,8 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 		err    error
 	)
 
-	if id != nil && *id == you {
-		if s.SegLen() > 1 {
-			return nil, &mux.HttpError{
-				Status: http.StatusNotFound,
-			}
-		}
-
-		a, err := authSrv(r.Context())
-		if err != nil {
-			return nil, err
-		}
-
-		claims, err := helpers.ValidateAndGetClaims(w, r, a, bloqs_auth.READ_PROFILE)
-		if err != nil {
-			return nil, err
-		}
-
-		*id = claims.Payload.Client
-
-		res, err := s.DBH.Select(r.Context(), "credential_profiles", func() map[string]any {
-			return map[string]any{
-				"profile_id": new(int64),
-				"birthDate":  new(string),
-			}
-		}, map[string]any{"credential_id": *id})
-		if err != nil {
-			return nil, err
-		}
-
-		var wait sync.WaitGroup
-		wait.Add(len(res.Rows))
-		accs := make([]db.JSON, 0, len(res.Rows))
-		search := func(id any, birthDate string) {
-			defer wait.Done()
-
-			var res db.Result
-			res, err = s.DBH.Select(r.Context(), "profile_view", func() map[string]any {
-				return map[string]any{
-					"id":                    new(int64),
-					"name":                  new(string),
-					"description":           new(string),
-					"image":                 new(string),
-					"url":                   new(string),
-					"hasAdultConsideration": new(bool),
-					"level":                 new(uint8),
-					"followers":             new(uint64),
-					"following":             new(uint64),
-				}
-			}, map[string]any{"id": id})
-			if err != nil {
-				return
-			}
-
-			accs = append(accs, personalAccount(r.Context(), res.Rows[0], birthDate, s))
-		}
-
-		for _, i := range res.Rows {
-			go search(i["profile_id"], i["birthDate"].(string))
-		}
-
-		wait.Wait()
-
-		result = db.Result{Rows: accs}
-	} else {
-		var where map[string]any = nil
-		cols := map[string]any{
-			"id":          new(int64),
-			"name":        new(string),
-			"description": new(string),
-			"image":       new(string),
-			"url":         new(string),
-			"level":       new(uint8),
-		}
-		var birthDate *string = nil
-
-		if (id != nil) && (*id != "") {
-			where = map[string]any{"id": *id}
-
+	if second == nil {
+		if id != nil && *id == you {
 			a, err := authSrv(r.Context())
 			if err != nil {
 				return nil, err
@@ -512,50 +421,158 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 				return nil, err
 			}
 
+			client := claims.Payload.Client
+
 			res, err := s.DBH.Select(r.Context(), "credential_profiles", func() map[string]any {
 				return map[string]any{
 					"profile_id": new(int64),
 					"birthDate":  new(string),
 				}
-			}, map[string]any{
-				"credential_id": claims.Payload.Client,
-				"profile_id":    id,
-			})
+			}, map[string]any{"credential_id": client})
+			if err != nil {
+				return nil, err
+			}
 
-			if err == nil && len(res.Rows) == 1 {
-				birthDate = res.Rows[0]["birthDate"].(*string)
-				cols["hasAdultConsideration"] = new(bool)
-				cols["followers"] = new(uint64)
-				cols["following"] = new(uint64)
+			var wait sync.WaitGroup
+			wait.Add(len(res.Rows))
+			accs := make([]db.JSON, 0, len(res.Rows))
+			search := func(id int64, birthDate string) {
+				defer wait.Done()
+
+				var res db.Result
+				//res, err = s.DBH.Select(r.Context(), "profile_view", func() map[string]any {
+				res, err = s.DBH.Select(r.Context(), "profile", func() map[string]any {
+					return map[string]any{
+						"id":                    new(int64),
+						"name":                  new(string),
+						"description":           new(sql.NullString),
+						"image":                 new(sql.NullString),
+						"url":                   new(sql.NullString),
+						"hasAdultConsideration": new(bool),
+						"level":                 new(uint8),
+						//					"followers":             new(uint64),
+						//					"following":             new(uint64),
+					}
+				}, map[string]any{"id": id})
+				if err != nil {
+					return
+				}
+
+				if len(res.Rows) > 0 {
+					accs = append(accs, personalAccount(r.Context(), res.Rows[0], birthDate, s))
+				}
+			}
+
+			for _, i := range res.Rows {
+				go search(*i["profile_id"].(*int64), *i["birthDate"].(*string))
+			}
+
+			wait.Wait()
+
+			result = db.Result{Rows: accs}
+		} else {
+			var where map[string]any = nil
+			cols := map[string]any{
+				"id":          new(int64),
+				"name":        new(string),
+				"description": new(sql.NullString),
+				"image":       new(sql.NullString),
+				"url":         new(sql.NullString),
+				"level":       new(uint8),
+			}
+
+			var birthDate *string = nil
+
+			a, err := authSrv(r.Context())
+			if err != nil {
+				return nil, err
+			}
+
+			if (id != nil) && (*id != "") {
+				where = map[string]any{"id": *id}
+			}
+
+			claims, err := helpers.ValidateAndGetClaims(w, r, a, bloqs_auth.NIL)
+			if err == nil {
+				res, err := s.DBH.Select(r.Context(), "credential_profiles", func() map[string]any {
+					return map[string]any{
+						"profile_id": new(int64),
+						"birthDate":  new(string),
+					}
+				}, map[string]any{
+					"credential_id": claims.Payload.Client,
+					"profile_id":    id,
+				})
+
+				if err == nil && res.Rows[0] != nil {
+					birthDate = res.Rows[0]["birthDate"].(*string)
+					cols["hasAdultConsideration"] = new(bool)
+					//				cols["followers"] = new(uint64)
+					//				cols["following"] = new(uint64)
+				}
+			}
+
+			//result, err = s.DBH.Select(r.Context(), "profile_view", func() map[string]any {
+			result, err = s.DBH.Select(r.Context(), "profile", func() map[string]any {
+				return cols
+			}, where)
+
+			if err == nil && birthDate != nil && result.Rows[0] != nil {
+				result.Rows[0] = personalAccount(r.Context(), result.Rows[0], *birthDate, s)
 			}
 		}
 
-		result, err = s.DBH.Select(r.Context(), "profile_view", func() map[string]any {
-			return cols
-		}, where)
+		for _, i := range result.Rows {
+			i["href"] = fmt.Sprintf("%s/profile/%d", api, *i["id"].(*int64))
 
-		if err == nil && birthDate != nil && result.Rows[0] != nil {
-			result.Rows[0] = personalAccount(r.Context(), result.Rows[0], *birthDate, s)
+			if v := i["description"].(*sql.NullString); v.Valid {
+				i["description"] = v.String
+			} else {
+				i["description"] = nil
+			}
+
+			if v := i["image"].(*sql.NullString); v.Valid {
+				i["image"] = v.String
+			} else {
+				i["image"] = nil
+			}
+
+			if v := i["url"].(*sql.NullString); v.Valid {
+				i["url"] = v.String
+			} else {
+				i["url"] = nil
+			}
 		}
+
+		status := http.StatusOK
+		msg := ""
+		if err != nil {
+			status = http.StatusInternalServerError
+			msg = err.Error()
+		}
+
+		return &rest.Resource{
+			Models:  result.Rows,
+			Type:    "Person",
+			Unique:  id != nil && *id != you,
+			Status:  uint16(status),
+			Message: msg,
+		}, err
+	} else if *second == "makesOffer" {
+		id, err := strconv.Atoi(*id)
+		if err != nil {
+			return nil, err
+		}
+
+		_, acc, err := YourProfile(w, r, s, bloqs_auth.NIL, int64(id))
+		if err != nil {
+			return nil, err
+		}
+
+		return personMakesOffer(r.Context(), acc, s.DBH)
 	}
 
-	for _, i := range result.Rows {
-		i["url"] = fmt.Sprintf("%s/profile/%d", api, *i["id"].(*int64))
-	}
-
-	status := http.StatusOK
-	msg := ""
-	if err != nil {
-		status = http.StatusInternalServerError
-		msg = err.Error()
-	}
-
-	return &rest.Resource{
-		Models:  result.Rows,
-		Unique:  id != nil && *id == you,
-		Status:  uint16(status),
-		Message: msg,
-	}, err
+	return nil, nil
 }
 
 func (Profile) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
@@ -619,9 +636,9 @@ func calcProfileLvLByString(creation_date_str string) uint8 {
 func personalAccount(ctx context.Context, acc db.JSON, birthDate string, s rest.RESTServer) db.JSON {
 	api := conf.MustGetConf("REST", "domain").(string)
 
-	id := acc["id"]
+	id := *acc["id"].(*int64)
 
-	if lvl := calcProfileLvLByString(birthDate); lvl > acc["level"].(uint8) {
+	if lvl := calcProfileLvLByString(birthDate); lvl > *acc["level"].(*uint8) {
 		if err := s.DBH.Update(ctx, "profile", map[string]any{
 			"level": lvl,
 		}, map[string]any{"id": id}); err != nil {
@@ -637,21 +654,19 @@ func personalAccount(ctx context.Context, acc db.JSON, birthDate string, s rest.
 			"weight":        new(float32),
 		}
 	}, map[string]any{"profile_id": id})
-
 	if err != nil {
+		fmt.Printf("%v\n", err)
 		return acc
 	}
 
-	likes := make([]db.JSON, 0, len(res.Rows))
 	for _, i := range res.Rows {
 		i["id"] = i["preference_id"]
 		i["url"] = fmt.Sprintf("%s/preference/%d", api, *i["preference_id"].(*int64))
-		i["@type"] = "Category"
+		i["@type"] = "CategoryCode"
 		delete(i, "preference_id")
-		likes = append(likes, i)
 	}
 
-	acc["likes"] = likes
+	acc["likes"] = res.Rows
 
 	following := make(map[string]any, 2)
 	following["size"] = acc["following"]
@@ -664,4 +679,57 @@ func personalAccount(ctx context.Context, acc db.JSON, birthDate string, s rest.
 	acc["followers"] = followers
 
 	return acc
+}
+
+func YourProfile(w http.ResponseWriter, r *http.Request, s rest.RESTServer, p bloqs_auth.Permission, you int64) (*bloqs_auth.Claims, db.JSON, error) {
+	a, err := authSrv(r.Context())
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	claims, err := helpers.ValidateAndGetClaims(w, r, a, p)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	res, err := s.DBH.Select(r.Context(), "credential_profiles", func() map[string]any {
+		return map[string]any{
+			"profile_id": new(int64),
+			"birthDate":  new(string),
+		}
+	}, map[string]any{
+		"credential_id": claims.Payload.Client,
+		"profile_id":    you,
+	})
+
+	if err != nil || res.Rows[0] == nil {
+		return nil, nil, &mux.HttpError{
+			Body:   "Can't create a bloq for a profile that isn't yours.",
+			Status: http.StatusUnauthorized,
+		}
+	}
+
+	birthDate := *res.Rows[0]["birthDate"].(*string)
+
+	res, err = s.DBH.Select(r.Context(), "profile", func() map[string]any {
+		return map[string]any{
+			"id":                    new(int64),
+			"name":                  new(string),
+			"description":           new(sql.NullString),
+			"image":                 new(sql.NullString),
+			"url":                   new(sql.NullString),
+			"hasAdultConsideration": new(bool),
+			"level":                 new(uint8),
+		}
+	}, map[string]any{"id": you})
+	if err != nil {
+		return claims, nil, err
+	}
+
+	if len(res.Rows) != 1 {
+		return claims, nil, nil
+	}
+
+	return claims, personalAccount(r.Context(), res.Rows[0], birthDate, s), nil
 }

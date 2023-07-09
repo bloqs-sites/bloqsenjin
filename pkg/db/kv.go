@@ -12,4 +12,6 @@ type KVDBer interface {
 	List(ctx context.Context, prefix *string, limit *uint) ([]string, uint64, error)
 	DeleteAll(ctx context.Context) error
 	Head(ctx context.Context, key ...string) (bool, error)
+
+	Close() error
 }

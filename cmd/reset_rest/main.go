@@ -24,9 +24,10 @@ func main() {
 
 	for _, i := range []rest.Handler{
 		new(models.Profile),
-		new(models.PreferenceHandler),
-		new(models.BloqHandler),
+		new(models.Preference),
+		new(models.Bloq),
 		new(models.Org),
+		new(models.Offer),
 	} {
 		if err := dbh.DropTables(context.Background(), i.CreateTable()); err != nil {
 			panic(err)

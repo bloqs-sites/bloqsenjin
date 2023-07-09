@@ -61,7 +61,7 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 
 	var rows *sql.Rows
 
-	if where != nil {
+	if len(where) > 0 {
 		var stmt *sql.Stmt
 		stmt, err = dbh.conn.PrepareContext(ctx, fmt.Sprintf("SELECT %s FROM `%s` WHERE %s;", strings.Join(keys, ", "), table, strings.Join(conditions, " AND ")))
 		if err != nil {
@@ -76,6 +76,7 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 
 	defer rows.Close()
 	if err != nil {
+		fmt.Printf("%v\n", err.Error())
 		return
 	}
 
@@ -287,4 +288,8 @@ func (dbh MySQL) DropTables(ctx context.Context, tables []db.Table) error {
 	}
 
 	return nil
+}
+
+func (dbh *MySQL) Close() error {
+	return dbh.conn.Close()
 }

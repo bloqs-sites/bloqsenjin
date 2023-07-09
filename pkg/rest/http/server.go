@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	internal_db "github.com/bloqs-sites/bloqsenjin/internal/db"
+	db "github.com/bloqs-sites/bloqsenjin/internal/db"
 	"github.com/bloqs-sites/bloqsenjin/internal/models"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
@@ -18,16 +18,17 @@ func Server(ctx context.Context, endpoint string) http.HandlerFunc {
 		panic(err)
 	}
 
-	dbh, err := internal_db.NewMySQL(ctx, strings.TrimSpace(os.Getenv("BLOQS_REST_MYSQL_DSN")))
+	dbh, err := db.NewMySQL(ctx, strings.TrimSpace(os.Getenv("BLOQS_REST_MYSQL_DSN")))
 	if err != nil {
 		panic(fmt.Errorf("error creating DB instance of type `%T`:\t%s", dbh, err))
 	}
 
 	s := rest.NewRESTServer(endpoint, dbh)
 
-	s.AttachHandler(context.Background(), "/preference", new(models.PreferenceHandler))
+	s.AttachHandler(context.Background(), "/preference", new(models.Preference))
 	s.AttachHandler(context.Background(), "/profile", new(models.Profile))
-	s.AttachHandler(context.Background(), "/bloq", new(models.BloqHandler))
+	s.AttachHandler(context.Background(), "/bloq", new(models.Bloq))
+	s.AttachHandler(context.Background(), "/offer", new(models.Offer))
 
 	return s.Serve()
 }

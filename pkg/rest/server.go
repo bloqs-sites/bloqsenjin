@@ -28,9 +28,15 @@ func NewRESTServer(endpoint string, crud db.DataManipulater) RESTServer {
 }
 
 func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler) {
-	s.DBH.CreateTables(ctx, h.CreateTable())
-	s.DBH.CreateIndexes(ctx, h.CreateIndexes())
-	s.DBH.CreateViews(ctx, h.CreateViews())
+	if err := s.DBH.CreateTables(ctx, h.CreateTable()); err != nil {
+		fmt.Printf("%v\n", err)
+	}
+	if err := s.DBH.CreateIndexes(ctx, h.CreateIndexes()); err != nil {
+		fmt.Printf("%v\n", err)
+	}
+	if err := s.DBH.CreateViews(ctx, h.CreateViews()); err != nil {
+		fmt.Printf("%v\n", err)
+	}
 
 	s.mux.Route(route, func(w http.ResponseWriter, r *http.Request, segs []string) {
 		var status uint16 = http.StatusInternalServerError
@@ -44,6 +50,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			fallthrough
 		case http.MethodGet:
 			if err != nil {
+				fmt.Printf("%v\n", err)
 				break
 			}
 
@@ -51,6 +58,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			resources, err = h.Read(w, r, *s)
 
 			if err != nil {
+				fmt.Printf("%v\n", err)
 				break
 			}
 
@@ -64,8 +72,19 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			w.Header().Set("Content-Type", "application/json")
 			encoder := json.NewEncoder(w)
 			ctx := "https://schema.org/"
-			typ := "Person"
-			if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "" && !resources.Unique) {
+			typ := resources.Type
+
+			if typ == "" {
+				err = &mux.HttpError{
+					Status: http.StatusInternalServerError,
+				}
+
+				break
+			}
+
+			last := s.Seg(s.SegLen() - 1)
+			second := s.Seg(1)
+			if ((s.SegLen() & 1) == 1) && (last != nil) && (*last != "") && resources.Unique {
 				if len(resources.Models) == 0 {
 					err = &mux.HttpError{
 						Status: http.StatusNotFound,
@@ -73,8 +92,10 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 
 					break
 				} else {
-					resources.Models[0]["@context"] = ctx
-					resources.Models[0]["@type"] = typ
+					if second == nil {
+						resources.Models[0]["@context"] = ctx
+						resources.Models[0]["@type"] = typ
+					}
 					err = encoder.Encode(resources.Models[0])
 				}
 			} else {
@@ -90,6 +111,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			}
 		case http.MethodPost:
 			if err != nil {
+				fmt.Printf("%v\n", err)
 				break
 			}
 
@@ -97,6 +119,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			created, err = h.Create(w, r, *s)
 
 			if err != nil {
+				fmt.Printf("%v\n", err)
 				break
 			}
 
@@ -140,6 +163,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 		}
 
 		if err != nil {
+			fmt.Printf("%v\n", err)
 			if err, ok := err.(*mux.HttpError); ok {
 				status = err.Status
 			}
@@ -162,7 +186,7 @@ func (s *RESTServer) Serve() http.HandlerFunc {
 }
 
 func (s RESTServer) Seg(i int) *string {
-	if len(s.segments) <= i {
+	if i < 0 || len(s.segments) <= i {
 		return nil
 	}
 

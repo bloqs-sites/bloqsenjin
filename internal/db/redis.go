@@ -91,3 +91,7 @@ func (db *KeyDB) Head(ctx context.Context, key ...string) (bool, error) {
 
 	return count >= int64(len(key)), err
 }
+
+func (db *KeyDB) Close() error {
+	return db.rdb.Close()
+}

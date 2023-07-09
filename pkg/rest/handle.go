@@ -14,6 +14,7 @@ type Created struct {
 
 type Resource struct {
 	Models  []db.JSON `json:"models"`
+	Type    string    `json:"@type"`
 	Status  uint16    `json:"status"`
 	Message string    `json:"message"`
 	Unique  bool      `json:"unique"`

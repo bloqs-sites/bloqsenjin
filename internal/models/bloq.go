@@ -1,40 +1,100 @@
 package models
 
 import (
-	"encoding/base64"
-	"encoding/json"
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	bloqs_auth "github.com/bloqs-sites/bloqsenjin/pkg/auth"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
-	"github.com/bloqs-sites/bloqsenjin/proto"
 )
 
-type BloqHandler struct {
+type Bloq struct {
 }
 
-func (BloqHandler) Table() string {
+func (Bloq) Table() string {
 	return "bloq"
 }
 
-func (BloqHandler) CreateTable() []db.Table {
+const BLOQ_TYPE = "Product"
+
+// aggregateRating
+// * category
+// * hasAdultConsideration (review schema)
+// * isRelatedTo
+// * keywords
+// * releaseDate
+// * review
+// * description
+// * identifier
+// * image
+// * name
+// * url
+
+/*
+/bloq/
+/bloq/:id/
+/bloq/:id/related
+/bloq/:id/reviews
+*/
+
+func (Bloq) CreateTable() []db.Table {
 	return []db.Table{
 		{
 			Name: "bloq",
 			Columns: []string{
 				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`creator` INT UNSIGNED NOT NULL",
 				"`category` INT UNSIGNED NOT NULL",
 				"`hasAdultConsideration` BOOL DEFAULT 0",
+				"`releaseDate` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
 				"`description` VARCHAR(140) NOT NULL",
 				"`name` VARCHAR(80) NOT NULL",
+				"PRIMARY KEY(`id`)",
+			},
+		},
+		{
+			Name: "bloq_related",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`bloq_id` INT UNSIGNED NOT NULL",
+				"`related_id` INT UNSIGNED NOT NULL",
+				"UNIQUE(`bloq_id`, `related_id`)",
+				"PRIMARY KEY(`id`)",
+			},
+		},
+		{
+			Name: "bloq_keywords",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`bloq_id` INT UNSIGNED NOT NULL",
+				"`keyword` VARCHAR(182) NOT NULL",
+				"UNIQUE(`bloq_id`, `keyword`)",
+				"PRIMARY KEY(`id`)",
+			},
+		},
+		{
+			Name: "bloq_review",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`itemReviewed` INT UNSIGNED NOT NULL",
+				"`author` INT UNSIGNED NOT NULL",
+				"`associatedReview` INT UNSIGNED DEFAULT NULL",
+				"`reviewBody` TEXT DEFAULT NULL",
+				"`reviewRating` INT NOT NULL",
+				"`dateCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+				"`dateModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+				"`inLanguage` TEXT NOT NULL",
+				"UNIQUE(`itemReviewed`, `author`, `associatedReview`)",
 				"PRIMARY KEY(`id`)",
 			},
 		},
@@ -47,32 +107,14 @@ func (BloqHandler) CreateTable() []db.Table {
 				"PRIMARY KEY(`bloq_id`)",
 			},
 		},
-		{
-			Name: "bloq_rating",
-			Columns: []string{
-				"`bloq_id` INT UNSIGNED NOT NULL",
-				"`profile_id` INT UNSIGNED NOT NULL",
-				"`rating` INT NOT NULL",
-				"PRIMARY KEY(`bloq_id`, `profile_id`)",
-			},
-		},
-		{
-			Name: "bloq_keyword",
-			Columns: []string{
-				"`id` INT UNSIGNED AUTO_INCREMENT",
-				"`bloq_id` INT UNSIGNED NOT NULL",
-				"`keyword` VARCHAR(182) NOT NULL",
-				"PRIMARY KEY(`id`)",
-			},
-		},
 	}
 }
 
-func (h *BloqHandler) CreateIndexes() []db.Index {
+func (h *Bloq) CreateIndexes() []db.Index {
 	return []db.Index{}
 }
 
-func (h *BloqHandler) CreateViews() []db.View {
+func (h *Bloq) CreateViews() []db.View {
 	return []db.View{
 		//	{
 		//		Name:   "bloq_basic",
@@ -81,123 +123,21 @@ func (h *BloqHandler) CreateViews() []db.View {
 	}
 }
 
-func (m BloqHandler) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServer) error {
-	var (
-		status uint32
-
-		err error
-	)
-
-	h := w.Header()
-	_, err = helpers.CheckOriginHeader(&h, r)
-
-	switch r.Method {
-	case "":
-		fallthrough
-	case http.MethodGet:
-		if err != nil {
-			return err
-		}
-
-		resources, err := m.Read(w, r, s)
-
-		if err != nil {
-			return err
-		}
-
-		if resources == nil {
-			return &mux.HttpError{
-				Status: http.StatusNotFound,
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		encoder := json.NewEncoder(w)
-		ctx := "https://schema.org/"
-		typ := "Product"
-		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "" && (r.URL.Path != "/account/@")) {
-			if len(resources.Models) == 0 {
-				return &mux.HttpError{
-					Status: http.StatusNotFound,
-				}
-			} else {
-				resources.Models[0]["@context"] = ctx
-				resources.Models[0]["@type"] = typ
-				return encoder.Encode(resources.Models[0])
-			}
-		} else {
-			resources.Models = append([]db.JSON{
-				{
-					"@context": ctx,
-					"@type":    typ,
-				},
-			}, resources.Models...)
-			return encoder.Encode(resources.Models)
-		}
-	case http.MethodPost:
-		if err != nil {
-			return err
-		}
-
-		created, err := m.Create(w, r, s)
-
-		if err != nil {
-			return err
-		}
-
-		if created == nil {
-			return &mux.HttpError{
-				Status: http.StatusInternalServerError,
-			}
-		}
-
-		var id *string = nil
-
-		domain := conf.MustGetConf("REST", "domain").(string)
-
-		if created.LastID != nil {
-			id_str := strconv.Itoa(int(*created.LastID))
-			id = &id_str
-		}
-
-		if id != nil {
-			w.Header().Set("Location", fmt.Sprintf("%s/%s/%s", domain, m.Table(), *id))
-		}
-		if w.Header().Get("Content-Type") == "" {
-			w.Header().Set("Content-Type", "text/plain")
-		}
-		w.WriteHeader(int(created.Status))
-		w.Write([]byte(created.Message))
-
-		return nil
-	case http.MethodOptions:
-		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
-		h.Set("Access-Control-Allow-Credentials", "true")
-		bloqs_helpers.Append(&h, "Access-Control-Allow-Headers", "Authorization")
-		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
-		h.Set("Access-Control-Max-Age", "0")
-		return err
-	default:
-		status = http.StatusMethodNotAllowed
-		return &mux.HttpError{
-			Body:   "",
-			Status: uint16(status),
-		}
-	}
-}
-
-func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
+func (Bloq) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
 	var (
 		status uint16 = http.StatusInternalServerError
 
-		name        string
-		description string
-		category    string
-		adult                = "0"
-		image       string   = "NULL"
-		keywords    []string = []string{}
+		name                  string
+		description           string
+		category              int
+		hasAdultConsideration = false
+		image                 multipart.File
+		image_header          *multipart.FileHeader
+		keywords              []string = []string{}
+		creator               int
 	)
+
+	nsfw := conf.MustGetConfOrDefault(false, "REST", "NSFW")
 
 	ct := r.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
@@ -205,7 +145,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.FORM_DATA, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -214,11 +154,34 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 
 		name = r.FormValue("name")
 		description = r.FormValue("description")
-		category = r.FormValue("category")
-		adult := r.FormValue("hasAdultConsideration")
-		if adult == "yes" || adult == "on" || adult == "1" || adult == "true" {
-			adult = "1"
+		var err error
+		creator, err = strconv.Atoi(r.FormValue("creator"))
+		if err != nil {
+			return nil, err
 		}
+		category, err = strconv.Atoi(r.FormValue("category"))
+		if err != nil {
+			return nil, err
+		}
+		image, image_header, err = r.FormFile("image")
+		if err != nil && !errors.Is(err, http.ErrMissingFile) {
+			return &rest.Created{
+					Status:  status,
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.FORM_DATA, err),
+				}, &mux.HttpError{
+					Body:   err.Error(),
+					Status: status,
+				}
+		}
+
+		if image != nil {
+			defer image.Close()
+		}
+
+		if nsfw {
+			hasAdultConsideration = bloqs_helpers.FormValueTrue(r.FormValue("hasAdultConsideration"))
+		}
+
 		keywords = r.Form["keywords"]
 	} else {
 		status = http.StatusUnsupportedMediaType
@@ -246,62 +209,52 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 		}, nil
 	}
 
-	tk, err := bloqs_helpers.ExtractToken(w, r)
-
-	if err != nil {
-		return nil, err
-	}
-
-	a, err := authSrv(r.Context())
-
-	if err != nil {
-		return nil, err
-	}
-
-	permission := bloqs_auth.CREATE_PROFILE
-	v, err := a.Validate(r.Context(), &proto.Token{
-		Jwt:         string(tk),
-		Permissions: (*uint64)(&permission),
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	claims := &bloqs_auth.Claims{}
-	claims_str, err := base64.RawStdEncoding.DecodeString(strings.Split(string(tk), ".")[1])
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(claims_str, claims)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !v.Valid {
-		msg := ""
-
-		if v.Message != nil {
-			msg = *v.Message
-		}
-
-		if v.HttpStatusCode != nil {
-			status = uint16(*v.HttpStatusCode)
-		}
-
-		return nil, &mux.HttpError{
-			Body:   msg,
-			Status: status,
+	if image_header != nil {
+		if ct := image_header.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/") {
+			status = http.StatusUnprocessableEntity
+			return &rest.Created{
+				Status:  status,
+				Message: "`image` it's not really a `image/*`",
+			}, nil
 		}
 	}
+
+	for _, v := range keywords {
+		if l := len(v); l > 182 || l <= 0 {
+			status = http.StatusUnprocessableEntity
+			return &rest.Created{
+				Status:  status,
+				Message: fmt.Sprintf("`keyword` `%s` body field has to have a length between 1 and 182 characters", v),
+			}, nil
+		}
+	}
+
+	exists, err := PreferenceExists(r.Context(), int64(category), s)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		status = http.StatusUnprocessableEntity
+		return &rest.Created{
+			Status:  status,
+			Message: fmt.Sprintf("`category` with id `%d` does not exist", category),
+		}, nil
+	}
+
+	_, _, err = YourProfile(w, r, s, bloqs_auth.CREATE_BLOQ, int64(creator))
+	if err != nil {
+		return nil, err
+	}
+
+	println("validations passed")
 
 	result, err := s.DBH.Insert(r.Context(), "bloq", []map[string]any{
 		{
 			"name":                  name,
 			"description":           description,
-			"hasAdultConsideration": adult,
+			"hasAdultConsideration": hasAdultConsideration,
 			"category":              category,
+			"creator":               creator,
 		},
 	})
 
@@ -313,7 +266,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 		}
 	}
 
-	id := strconv.Itoa(int(*result.LastID))
+	id := *result.LastID
 
 	_, err = s.DBH.Insert(r.Context(), "bloq_image", []map[string]any{
 		{
@@ -341,7 +294,7 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 			})
 		}
 
-		_, err = s.DBH.Insert(r.Context(), "bloq_keyword", keywords_inserts)
+		_, err = s.DBH.Insert(r.Context(), "bloq_keywords", keywords_inserts)
 
 		if err != nil {
 			s.DBH.Delete(r.Context(), "bloq", map[string]any{"id": id})
@@ -356,68 +309,319 @@ func (BloqHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSer
 	}
 
 	return &rest.Created{
-		LastID:  result.LastID,
+		LastID:  &id,
 		Message: "",
 		Status:  http.StatusCreated,
 	}, nil
 }
 
-func (BloqHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
 	id := s.Seg(0)
+	second := s.Seg(1)
 
-	var where map[string]any = nil
+	api := conf.MustGetConf("REST", "domain").(string)
+
+	var (
+		acc db.JSON
+		err error
+	)
+
+	myself := conf.MustGetConfOrDefault("@", "REST", "myself")
+	profile, err := strconv.Atoi(r.URL.Query().Get(myself))
+	if err == nil {
+		_, acc, err = YourProfile(w, r, s, bloqs_auth.NIL, int64(profile))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var where map[string]any = make(map[string]any)
 	if (id != nil) && (*id != "") {
-		where = map[string]any{"id": *id}
+		where["id"] = *id
+	}
+
+	if conf.MustGetConfOrDefault(false, "REST", "NSFW") {
+		if acc != nil {
+			if bloqs_helpers.FormValueTrue(r.URL.Query().Get("NSFW")) {
+				where["hasAdultConsideration"] = true
+			} else {
+				where["hasAdultConsideration"] = *acc["hasAdultConsideration"].(*bool)
+			}
+		}
+	} else {
+		where["hasAdultConsideration"] = false
+	}
+
+	category := r.URL.Query().Get("category")
+	if category != "" {
+		if v, err := strconv.Atoi(category); err != nil {
+			where["category"] = v
+		}
 	}
 
 	result, err := s.DBH.Select(r.Context(), "bloq", func() map[string]any {
 		return map[string]any{
 			"id":                    new(int64),
+			"creator":               new(int64),
 			"category":              new(int64),
 			"name":                  new(string),
 			"description":           new(string),
 			"hasAdultConsideration": new(bool),
+			"releaseDate":           new(string),
 		}
 	}, where)
 
-	if err != nil {
+	if err != nil || len(result.Rows) == 0 {
+		return nil, err
+	}
+
+	if second == nil {
+		for _, v := range result.Rows {
+			id := *v["id"].(*int64)
+
+			result, err := s.DBH.Select(r.Context(), "bloq_related", func() map[string]any {
+				return map[string]any{"related_id": new(int64)}
+			}, map[string]any{"bloq_id": id})
+			if err != nil {
+				return nil, err
+			}
+
+			related := make([]db.JSON, 0, len(result.Rows)+1)
+			related = append(related, db.JSON{"@type": "Product"})
+			for _, i := range result.Rows {
+				url := fmt.Sprintf("%s/bloq/%d", api, *i["related_id"].(*int64))
+				related = append(related, db.JSON{"url": url})
+			}
+			v["related"] = related
+
+			result, err = s.DBH.Select(r.Context(), "bloq_keywords", func() map[string]any {
+				return map[string]any{"keyword": new(string)}
+			}, map[string]any{"bloq_id": id})
+			if err != nil {
+				return nil, err
+			}
+
+			keywords := make([]string, 0, len(result.Rows))
+			for _, i := range result.Rows {
+				keywords = append(keywords, *i["keyword"].(*string))
+			}
+			v["keywords"] = keywords
+
+			v["reviews"] = fmt.Sprintf("%s/bloq/%d/reviews/", api, id)
+
+			result, err = s.DBH.Select(r.Context(), "bloq_image", func() map[string]any {
+				return map[string]any{"image": new(sql.NullString)}
+			}, map[string]any{"bloq_id": id})
+			if err != nil {
+				return nil, err
+			}
+
+			image := result.Rows[0]["image"].(*sql.NullString)
+			if image.Valid {
+				v["image"] = image.String
+			}
+
+			v["url"] = fmt.Sprintf("%s/bloq/%d", api, id)
+		}
+
+		status := http.StatusOK
+		msg := ""
+		if err != nil {
+			status = http.StatusInternalServerError
+			msg = err.Error()
+		}
+
+		return &rest.Resource{
+			Models:  result.Rows,
+			Type:    BLOQ_TYPE,
+			Unique:  id != nil,
+			Status:  uint16(status),
+			Message: msg,
+		}, err
+	} else if *second == "related" {
+		second_id := s.Seg(2)
+
+		if second_id != nil {
+			return nil, &mux.HttpError{}
+		}
+
+		result, err := s.DBH.Select(r.Context(), "bloq_related", func() map[string]any {
+			return map[string]any{"related_id": new(int64)}
+		}, map[string]any{"bloq_id": id})
+		if err != nil {
+			return nil, err
+		}
+
+		related := make([]db.JSON, 0, len(result.Rows)+1)
+		related = append(related, db.JSON{"@type": "Product"})
+		for _, i := range result.Rows {
+			url := fmt.Sprintf("%s/bloq/%d", api, *i["related_id"].(*int64))
+			related = append(related, db.JSON{"url": url})
+		}
+
+		return &rest.Resource{
+			Models: related,
+			Type:   BLOQ_TYPE,
+			Status: http.StatusOK,
+			Unique: false,
+		}, nil
+	} else if *second == "reviews" {
+		second_id := s.Seg(2)
+
+		cols := map[string]any{
+			"id":           new(int64),
+			"author":       new(int64),
+			"reviewBody":   new(string),
+			"reviewRating": new(int8),
+			"dateCreated":  new(string),
+			"dateModified": new(string),
+			"inLanguage":   new(string),
+		}
+		where := map[string]any{"itemReviewed": *id}
+		if second_id != nil {
+			where["id"] = *second_id
+			cols["associatedReview"] = new(int64)
+			if third := s.Seg(3); third != nil && *third == "associated" {
+				if s.Seg(4) != nil {
+					return nil, &mux.HttpError{
+						Status: http.StatusNotFound,
+					}
+				}
+				cols = map[string]any{"id": new(int64)}
+				where["associatedReview"] = *id
+			}
+		}
+
+		result, err := s.DBH.Select(r.Context(), "bloq_review", func() map[string]any {
+			return cols
+		}, where)
+		if err != nil {
+			return nil, err
+		}
+
+		unique := second_id != nil && s.Seg(3) == nil
+
+		related := make([]db.JSON, 0, len(result.Rows))
+		if !unique {
+			related = append(related, db.JSON{"@type": "Product"})
+			for _, i := range result.Rows {
+				i["url"] = fmt.Sprintf("%s/bloq/%d/reviews/%d", api, id, *i["related_id"].(*int64))
+				i["associated"] = fmt.Sprintf("%s/bloq/%d/associated", api, id)
+				related = append(related, i)
+			}
+		} else {
+			if len(result.Rows) == 1 {
+				i := result.Rows[0]
+				i["url"] = fmt.Sprintf("%s/bloq/%d/reviews/%d", api, id, *i["related_id"].(*int64))
+				i["associated"] = fmt.Sprintf("%s/bloq/%d/associated", api, id)
+				related = append(related, i)
+			}
+		}
+
+		return &rest.Resource{
+			Models: related,
+			Type:   "Review",
+			Status: http.StatusOK,
+			Unique: unique,
+		}, nil
+	}
+
+	return nil, nil
+}
+
+func (Bloq) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+	return nil, nil
+}
+
+func (Bloq) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+	return nil, nil
+}
+
+func isProductCreator(ctx context.Context, product int64, creator int64, dbh db.DataManipulater) (bool, error) {
+	res, err := dbh.Select(ctx, "bloq", func() map[string]any {
+		return map[string]any{"creator": new(int64)}
+	}, map[string]any{"id": product, "creator": creator})
+
+	return len(res.Rows) == 1, err
+}
+
+func personMakesOffer(ctx context.Context, person db.JSON, dbh db.DataManipulater) (*rest.Resource, error) {
+	if person == nil {
+		return nil, errors.New("no person received passed")
+	}
+
+	var where map[string]any = make(map[string]any, 2)
+	where["creator"] = *person["id"].(*int64)
+	if conf.MustGetConfOrDefault(false, "REST", "NSFW") {
+		where["hasAdultConsideration"] = *person["hasAdultConsideration"].(*bool)
+	} else {
+		where["hasAdultConsideration"] = false
+	}
+
+	result, err := dbh.Select(ctx, "bloq", func() map[string]any {
+		return map[string]any{
+			"id":                    new(int64),
+			"creator":               new(int64),
+			"category":              new(int64),
+			"name":                  new(string),
+			"description":           new(string),
+			"hasAdultConsideration": new(bool),
+			"releaseDate":           new(string),
+		}
+	}, where)
+
+	if err != nil || len(result.Rows) == 0 {
 		return nil, err
 	}
 
 	api := conf.MustGetConf("REST", "domain").(string)
-
 	for _, v := range result.Rows {
-		result, err := s.DBH.Select(r.Context(), "bloq_image", func() map[string]any {
-			return map[string]any{"image": new(string)}
-		}, map[string]any{"bloq_id": v["id"]})
+		id := *v["id"].(*int64)
 
+		fmt.Printf("\n%#v\t%#v\n\n", v, id)
+		result, err := dbh.Select(ctx, "bloq_related", func() map[string]any {
+			return map[string]any{"related_id": new(int64)}
+		}, map[string]any{"bloq_id": id})
 		if err != nil {
 			return nil, err
 		}
 
-		v["image"] = result.Rows[0]["image"]
+		related := make([]db.JSON, 0, len(result.Rows)+1)
+		related = append(related, db.JSON{"@type": "Product"})
+		for _, i := range result.Rows {
+			url := fmt.Sprintf("%s/bloq/%d", api, *i["related_id"].(*int64))
+			related = append(related, db.JSON{"url": url})
+		}
+		v["related"] = related
 
-		result, err = s.DBH.Select(r.Context(), "bloq_rating", func() map[string]any {
-			return map[string]any{
-				"profile_id": new(int64),
-				"rating":     new(string),
-			}
-		}, map[string]any{"bloq_id": v["id"]})
-
+		result, err = dbh.Select(ctx, "bloq_keywords", func() map[string]any {
+			return map[string]any{"keyword": new(string)}
+		}, map[string]any{"bloq_id": id})
 		if err != nil {
 			return nil, err
 		}
 
-		for _, r := range result.Rows {
-			r["profile"] = fmt.Sprintf("%s/account/%d", api, *r["profile_id"].(*int64))
-			delete(r, "profile_id")
+		keywords := make([]string, 0, len(result.Rows))
+		for _, i := range result.Rows {
+			keywords = append(keywords, *i["keyword"].(*string))
+		}
+		v["keywords"] = keywords
+
+		v["reviews"] = fmt.Sprintf("%s/bloq/%d/reviews/", api, id)
+
+		result, err = dbh.Select(ctx, "bloq_image", func() map[string]any {
+			return map[string]any{"image": new(sql.NullString)}
+		}, map[string]any{"bloq_id": id})
+		if err != nil {
+			return nil, err
 		}
 
-		v["ratings"] = result.Rows
-	}
+		image := result.Rows[0]["image"].(*sql.NullString)
+		if image.Valid {
+			v["image"] = image.String
+		}
 
-	for _, i := range result.Rows {
-		i["url"] = fmt.Sprintf("%s/bloq/%d", api, *i["id"].(*int64))
+		v["url"] = fmt.Sprintf("%s/bloq/%d", api, id)
 	}
 
 	status := http.StatusOK
@@ -429,15 +633,9 @@ func (BloqHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServe
 
 	return &rest.Resource{
 		Models:  result.Rows,
+		Type:    BLOQ_TYPE,
+		Unique:  false,
 		Status:  uint16(status),
 		Message: msg,
 	}, err
-}
-
-func (BloqHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
-	return nil, nil
-}
-
-func (BloqHandler) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
-	return nil, nil
 }

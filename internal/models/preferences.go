@@ -2,7 +2,6 @@ package models
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,15 +21,60 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type PreferenceHandler struct {
+type Preference struct {
 }
 
-func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
+func (Preference) Table() string {
+	return "preference"
+}
+
+func (Preference) Type() string {
+	return "CategoryCode"
+}
+
+func (Preference) CreateTable() []db.Table {
+	return []db.Table{
+		{
+			Name: "preference",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`name` VARCHAR(80) NOT NULL",
+				"`description` VARCHAR(140) NOT NULL",
+				"`color` VARCHAR(80) NOT NULL",
+				"UNIQUE(`name`)",
+				"PRIMARY KEY(`id`)",
+			},
+		},
+		{
+			Name: "shares",
+			Columns: []string{
+				"`id` INT UNSIGNED AUTO_INCREMENT",
+				"`preference1_id` INT UNSIGNED NOT NULL",
+				"`preference2_id` INT UNSIGNED NOT NULL",
+				"`weight` FLOAT(6,3) DEFAULT 0",
+				"UNIQUE(`preference1_id`, `preference2_id`)",
+				"PRIMARY KEY(`id`)",
+				"CHECK (preference1_id < preference2_id)",
+			},
+		},
+	}
+}
+
+func (Preference) CreateIndexes() []db.Index {
+	return []db.Index{}
+}
+
+func (Preference) CreateViews() []db.View {
+	return []db.View{}
+}
+
+func (m Preference) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Created, error) {
 	var (
 		status uint16 = http.StatusInternalServerError
 
 		name        string
 		description string
+		color       string
 	)
 
 	ct := r.Header.Get("Content-Type")
@@ -48,12 +92,13 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 
 		name = r.FormValue("name")
 		description = r.FormValue("description")
+		color = r.FormValue("color")
 	} else if strings.HasPrefix(ct, bloqs_helpers.FORM_DATA) {
 		if err := r.ParseMultipartForm(0x400); err != nil {
 			status = http.StatusBadRequest
 			return &rest.Created{
 					Status:  status,
-					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.X_WWW_FORM_URLENCODED, err),
+					Message: fmt.Sprintf("the HTTP request body could not be parsed as `%s`:\t%s", bloqs_helpers.FORM_DATA, err),
 				}, &mux.HttpError{
 					Body:   err.Error(),
 					Status: status,
@@ -62,6 +107,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 
 		name = r.FormValue("name")
 		description = r.FormValue("description")
+		color = r.FormValue("color")
 	} else {
 		status = http.StatusUnsupportedMediaType
 		h := w.Header()
@@ -89,43 +135,23 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		}, nil
 	}
 
+	if l := len(color); l > 80 {
+		status = http.StatusUnprocessableEntity
+		return &rest.Created{
+			Status:  status,
+			Message: "`color` body field has to have a length with a maximum of 80 characters",
+		}, nil
+	}
+
 	a, err := authSrv(r.Context())
 
 	if err != nil {
 		return nil, err
 	}
 
-	tk, err := bloqs_helpers.ExtractToken(w, r)
-
+	_, err = helpers.ValidateAndGetToken(w, r, a, bloqs_auth.CREATE_PREFERENCE)
 	if err != nil {
 		return nil, err
-	}
-
-	permission := bloqs_auth.CREATE_PREFERENCE
-	v, err := a.Validate(r.Context(), &proto.Token{
-		Jwt:         string(tk),
-		Permissions: (*uint64)(&permission),
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !v.Valid {
-		msg := ""
-
-		if v.Message != nil {
-			msg = *v.Message
-		}
-
-		if v.HttpStatusCode != nil {
-			status = uint16(*v.HttpStatusCode)
-		}
-
-		return nil, &mux.HttpError{
-			Body:   msg,
-			Status: status,
-		}
 	}
 
 	preferences, err := s.DBH.Select(r.Context(), "preference", func() map[string]any {
@@ -144,6 +170,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 		{
 			"name":        name,
 			"description": description,
+			"color":       color,
 		},
 	})
 
@@ -196,7 +223,7 @@ func (p PreferenceHandler) Create(w http.ResponseWriter, r *http.Request, s rest
 	}, nil
 }
 
-func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+func (p Preference) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
 	id := s.Seg(0)
 
 	var where map[string]any = nil
@@ -209,13 +236,14 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 			"id":          new(int64),
 			"name":        new(string),
 			"description": new(string),
+			"color":       new(string),
 		}
 	}, where)
 
 	api := conf.MustGetConf("REST", "domain").(string)
 
 	for _, i := range result.Rows {
-		i["url"] = fmt.Sprintf("%s/preference/%d", api, *i["id"].(*int64))
+		i["href"] = fmt.Sprintf("%s/preference/%d", api, *i["id"].(*int64))
 	}
 
 	status := http.StatusOK
@@ -227,162 +255,19 @@ func (p PreferenceHandler) Read(w http.ResponseWriter, r *http.Request, s rest.R
 
 	return &rest.Resource{
 		Models:  result.Rows,
+		Type:    "CategoryCode",
 		Status:  uint16(status),
+		Unique:  (id != nil) && (*id != ""),
 		Message: msg,
 	}, err
 }
 
-func (p PreferenceHandler) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+func (p Preference) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
 	return nil, nil
 }
 
-func (p PreferenceHandler) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
+func (p Preference) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
 	return nil, nil
-}
-
-func (p PreferenceHandler) Handle(w http.ResponseWriter, r *http.Request, s rest.RESTServer) error {
-	var (
-		status uint32
-
-		err error
-	)
-
-	h := w.Header()
-	_, err = helpers.CheckOriginHeader(&h, r)
-
-	switch r.Method {
-	case "":
-		fallthrough
-	case http.MethodGet:
-		if err != nil {
-			return err
-		}
-
-		resources, err := p.Read(w, r, s)
-
-		if err != nil {
-			return err
-		}
-
-		if resources == nil {
-			return &mux.HttpError{
-				Status: http.StatusNotFound,
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		encoder := json.NewEncoder(w)
-		ctx := "https://schema.org/"
-		typ := "CategoryCode"
-		if ((s.SegLen() & 1) == 1) && (s.Seg(s.SegLen()-1) != nil) && (*s.Seg(s.SegLen() - 1) != "") {
-			if len(resources.Models) == 0 {
-				return &mux.HttpError{
-					Status: http.StatusNotFound,
-				}
-			} else {
-				resources.Models[0]["@context"] = ctx
-				resources.Models[0]["@type"] = typ
-				return encoder.Encode(resources.Models[0])
-			}
-		} else {
-			resources.Models = append([]db.JSON{
-				{
-					"@context": ctx,
-					"@type":    typ,
-				},
-			}, resources.Models...)
-			return encoder.Encode(resources.Models)
-		}
-	case http.MethodPost:
-		if err != nil {
-			return err
-		}
-
-		created, err := p.Create(w, r, s)
-
-		if err != nil {
-			return err
-		}
-
-		if created == nil {
-			return &mux.HttpError{
-				Status: http.StatusInternalServerError,
-			}
-		}
-
-		var id *string = nil
-
-		domain := conf.MustGetConf("REST", "domain").(string)
-
-		if created.LastID != nil {
-			id_str := strconv.Itoa(int(*created.LastID))
-			id = &id_str
-		}
-
-		if id != nil {
-			w.Header().Set("Location", fmt.Sprintf("%s/%s/%s", domain, p.Table(), *id))
-		}
-		if w.Header().Get("Content-Type") == "" {
-			w.Header().Set("Content-Type", "text/plain")
-		}
-		w.WriteHeader(int(created.Status))
-		w.Write([]byte(created.Message))
-
-		return nil
-	case http.MethodOptions:
-		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodPost)
-		bloqs_helpers.Append(&h, "Access-Control-Allow-Methods", http.MethodOptions)
-		h.Set("Access-Control-Allow-Credentials", "true")
-		bloqs_helpers.Append(&h, "Access-Control-Allow-Headers", "Authorization")
-		//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
-		h.Set("Access-Control-Max-Age", "0")
-		return err
-	default:
-		status = http.StatusMethodNotAllowed
-		return &mux.HttpError{
-			Body:   "",
-			Status: uint16(status),
-		}
-	}
-}
-
-func (p PreferenceHandler) CreateTable() []db.Table {
-	return []db.Table{
-		{
-			Name: "preference",
-			Columns: []string{
-				"`id` INT UNSIGNED AUTO_INCREMENT",
-				"`name` VARCHAR(80)",
-				"`description` VARCHAR(140)",
-				"UNIQUE(`name`)",
-				"PRIMARY KEY(`id`)",
-			},
-		},
-		{
-			Name: "shares",
-			Columns: []string{
-				"`id` INT UNSIGNED AUTO_INCREMENT",
-				"`preference1_id` INT UNSIGNED NOT NULL",
-				"`preference2_id` INT UNSIGNED NOT NULL",
-				"`weight` FLOAT(6,3) DEFAULT 0",
-				"UNIQUE(`preference1_id`, `preference2_id`)",
-				"PRIMARY KEY(`id`)",
-				"CHECK (preference1_id < preference2_id)",
-			},
-		},
-	}
-}
-
-func (h *PreferenceHandler) CreateIndexes() []db.Index {
-	return []db.Index{}
-}
-
-func (h *PreferenceHandler) CreateViews() []db.View {
-	return []db.View{}
-}
-
-func (p PreferenceHandler) Table() string {
-	return "preference"
 }
 
 func authSrv(ctx context.Context) (proto.AuthServer, error) {
@@ -410,4 +295,15 @@ func authSrv(ctx context.Context) (proto.AuthServer, error) {
 	t := auth.NewBloqsTokener(secrets)
 
 	return bloqs_auth.NewAuthServer(a, t), nil
+}
+
+func PreferenceExists(ctx context.Context, id int64, s rest.RESTServer) (bool, error) {
+	result, err := s.DBH.Select(ctx, "preference", func() map[string]any {
+		return map[string]any{"id": new(int64)}
+	}, map[string]any{"id": id})
+	if err != nil {
+		return false, err
+	}
+
+	return len(result.Rows) == 1, nil
 }

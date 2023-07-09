@@ -21,6 +21,8 @@ import (
 type Org struct {
 }
 
+const ORG_TYPE = "Organization"
+
 func (Org) Table() string {
 	return "org"
 }
@@ -494,6 +496,7 @@ func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*res
 
 	return &rest.Resource{
 		Models:  result.Rows,
+		Type:    ORG_TYPE,
 		Status:  uint16(status),
 		Message: msg,
 	}, err

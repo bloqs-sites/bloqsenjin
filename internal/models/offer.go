@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
@@ -320,30 +321,49 @@ func (Offer) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*r
 
 		res, err := s.DBH.Select(r.Context(), ItemsOfferedTable,
 			func() map[string]any {
-				return map[string]any{"offers": new(uint64)}
+				return map[string]any{"offers": new(int64)}
 			}, []db.Condition{{Column: "item", Value: product_id}})
 
 		results := make([]db.JSON, 0, len(res.Rows))
+		api := conf.MustGetConf("REST", "domain").(string)
 		for _, i := range res.Rows {
-			id := *i["offers"].(*uint64)
+			id := *i["offers"].(*int64)
 			now := time.Now()
 			res, err := s.DBH.Select(r.Context(), OfferTable,
 				func() map[string]any {
 					return map[string]any{
-						"id":                 new(uint64),
+						"id":                 new(int64),
 						"availability":       new(ItemAvailability),
 						"availabilityStarts": new(string),
 						"availabilityEnds":   new(string),
-						"offeredBy":          new(uint64),
+						"offeredBy":          new(int64),
 						"price":              new(float32),
 					}
 				}, []db.Condition{
-					{Column: "id", Op: db.EQ, Value: id},
+					{Column: "id", Value: id},
 					{Column: "availabilityStarts", Op: db.LE, Value: now},
 					{Column: "availabilityEnds", Op: db.GE, Value: now},
 				})
 			if err != nil {
 				return nil, err
+			}
+			for _, o := range res.Rows {
+				res, err = s.DBH.Select(r.Context(), ItemsOfferedTable,
+					func() map[string]any {
+						return map[string]any{"offers": new(int64)}
+					}, []db.Condition{{Column: "item", Value: *o["id"].(*int64)}})
+
+				if err != nil {
+					return nil, err
+				}
+
+				for _, i := range res.Rows {
+					i["href"] = fmt.Sprintf("%s/bloq/%d", api, i["offers"])
+				}
+				o["itemsOffered"] = append([]db.JSON{{
+					"@context": "https://schema.org/",
+					"@type":    "Product",
+				}}, res.Rows...)
 			}
 			results = append(results, res.Rows...)
 		}

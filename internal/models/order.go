@@ -53,6 +53,7 @@ func (Order) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 		status uint16 = http.StatusInternalServerError
 
 		acceptedOffer int64
+		quantity      = 1
 	)
 
 	ct := r.Header.Get("Content-Type")
@@ -74,6 +75,13 @@ func (Order) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 			return nil, err
 		}
 		acceptedOffer = int64(acceptedOfferInt)
+		qstr := r.FormValue("quantity")
+		if qstr != "" {
+			q, err := strconv.Atoi(qstr)
+			if err == nil {
+				quantity = q
+			}
+		}
 	} else if strings.HasPrefix(ct, helpers.FORM_DATA) {
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
 			status = http.StatusBadRequest
@@ -92,6 +100,13 @@ func (Order) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 			return nil, err
 		}
 		acceptedOffer = int64(acceptedOfferInt)
+		qstr := r.FormValue("quantity")
+		if qstr != "" {
+			q, err := strconv.Atoi(qstr)
+			if err == nil {
+				quantity = q
+			}
+		}
 	} else {
 		status = http.StatusUnsupportedMediaType
 		h := w.Header()
@@ -114,24 +129,23 @@ func (Order) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 		return nil, err
 	}
 
-	result, err := s.DBH.Insert(r.Context(), OfferTable, []map[string]any{
-		{
-			"customer":      claims.Payload.Client,
-			"acceptedOffer": acceptedOffer,
-		},
-	})
-	if err != nil {
-		status = http.StatusInternalServerError
-		return nil, &mux.HttpError{
-			Body:   err.Error(),
-			Status: status,
+	for i := 0; i < quantity; i++ {
+		_, err := s.DBH.Insert(r.Context(), OrderTable, []map[string]any{
+			{
+				"customer":      claims.Payload.Client,
+				"acceptedOffer": acceptedOffer,
+			},
+		})
+		if err != nil {
+			status = http.StatusInternalServerError
+			return nil, &mux.HttpError{
+				Body:   err.Error(),
+				Status: status,
+			}
 		}
 	}
 
-	id := *result.LastID
-
 	return &rest.Created{
-		LastID:  &id,
 		Message: "",
 		Status:  http.StatusCreated,
 	}, nil

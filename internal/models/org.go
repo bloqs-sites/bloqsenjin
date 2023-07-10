@@ -469,7 +469,7 @@ func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*res
 	} else {
 		var where []db.Condition = []db.Condition{}
 		if (id != nil) && (*id != "") {
-            where = append(where, db.Condition{Column: "id", Value: *id})
+			where = append(where, db.Condition{Column: "id", Value: *id})
 		}
 
 		result, err = s.DBH.Select(r.Context(), "account", func() map[string]any {

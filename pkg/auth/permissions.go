@@ -23,9 +23,18 @@ const (
 	UPDATE_OFFER
 	DELETE_OFFER
 
+	CREATE_ORDER
+	DELETE_ORDER
+
 	PREFERENCE_MANAGER = CREATE_PREFERENCE | UPDATE_PREFERENCE | DELETE_PREFERENCE
 
-	DEFAULT_PERMISSIONS = CREATE_PROFILE | READ_PROFILE | CREATE_BLOQ | UPDATE_BLOQ | CREATE_OFFER
+	DEFAULT_PERMISSIONS = CREATE_PROFILE |
+		READ_PROFILE |
+		CREATE_BLOQ |
+		UPDATE_BLOQ |
+		CREATE_OFFER |
+		CREATE_ORDER |
+		DELETE_ORDER
 )
 
 var Permissions = map[string]Permission{
@@ -35,6 +44,8 @@ var Permissions = map[string]Permission{
 	"create_offer":   CREATE_OFFER,
 	"update_offer":   UPDATE_OFFER,
 	"delete_offer":   DELETE_OFFER,
+	"create_order":   CREATE_ORDER,
+	"delete_order":   DELETE_ORDER,
 	"create_profile": CREATE_PROFILE,
 	"read_profile":   CREATE_PROFILE,
 	"update_profile": UPDATE_PROFILE,

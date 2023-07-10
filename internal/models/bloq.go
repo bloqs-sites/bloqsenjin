@@ -246,8 +246,6 @@ func (Bloq) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*
 		return nil, err
 	}
 
-	println("validations passed")
-
 	result, err := s.DBH.Insert(r.Context(), "bloq", []map[string]any{
 		{
 			"name":                  name,
@@ -335,27 +333,36 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 		}
 	}
 
-	var where map[string]any = make(map[string]any)
+	var where []db.Condition = make([]db.Condition, 0)
 	if (id != nil) && (*id != "") {
-		where["id"] = *id
+		where = append(where, db.Condition{Column: "id", Value: *id})
 	}
 
 	if conf.MustGetConfOrDefault(false, "REST", "NSFW") {
 		if acc != nil {
 			if bloqs_helpers.FormValueTrue(r.URL.Query().Get("NSFW")) {
-				where["hasAdultConsideration"] = true
+				where = append(where, db.Condition{
+					Column: "hasAdultConsideration",
+					Value:  true,
+				})
 			} else {
-				where["hasAdultConsideration"] = *acc["hasAdultConsideration"].(*bool)
+				where = append(where, db.Condition{
+					Column: "hasAdultConsideration",
+					Value:  *acc["hasAdultConsideration"].(*bool),
+				})
 			}
 		}
 	} else {
-		where["hasAdultConsideration"] = false
+		where = append(where, db.Condition{
+			Column: "hasAdultConsideration",
+			Value:  false,
+		})
 	}
 
 	category := r.URL.Query().Get("category")
 	if category != "" {
 		if v, err := strconv.Atoi(category); err != nil {
-			where["category"] = v
+			where = append(where, db.Condition{Column: "category", Value: v})
 		}
 	}
 
@@ -381,7 +388,7 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 
 			result, err := s.DBH.Select(r.Context(), "bloq_related", func() map[string]any {
 				return map[string]any{"related_id": new(int64)}
-			}, map[string]any{"bloq_id": id})
+			}, []db.Condition{{Column: "bloq_id", Value: id}})
 			if err != nil {
 				return nil, err
 			}
@@ -396,7 +403,7 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 
 			result, err = s.DBH.Select(r.Context(), "bloq_keywords", func() map[string]any {
 				return map[string]any{"keyword": new(string)}
-			}, map[string]any{"bloq_id": id})
+			}, []db.Condition{{Column: "bloq_id", Value: id}})
 			if err != nil {
 				return nil, err
 			}
@@ -411,7 +418,7 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 
 			result, err = s.DBH.Select(r.Context(), "bloq_image", func() map[string]any {
 				return map[string]any{"image": new(sql.NullString)}
-			}, map[string]any{"bloq_id": id})
+			}, []db.Condition{{Column: "bloq_id", Value: id}})
 			if err != nil {
 				return nil, err
 			}
@@ -447,7 +454,7 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 
 		result, err := s.DBH.Select(r.Context(), "bloq_related", func() map[string]any {
 			return map[string]any{"related_id": new(int64)}
-		}, map[string]any{"bloq_id": id})
+		}, []db.Condition{{Column: "bloq_id", Value: id}})
 		if err != nil {
 			return nil, err
 		}
@@ -477,9 +484,9 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 			"dateModified": new(string),
 			"inLanguage":   new(string),
 		}
-		where := map[string]any{"itemReviewed": *id}
+		where := []db.Condition{{Column: "itemReviewed", Value: *id}}
 		if second_id != nil {
-			where["id"] = *second_id
+			where = append(where, db.Condition{Column: "id", Value: *second_id})
 			cols["associatedReview"] = new(int64)
 			if third := s.Seg(3); third != nil && *third == "associated" {
 				if s.Seg(4) != nil {
@@ -488,7 +495,7 @@ func (Bloq) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*re
 					}
 				}
 				cols = map[string]any{"id": new(int64)}
-				where["associatedReview"] = *id
+				where = append(where, db.Condition{Column: "associatedReview", Value: *id})
 			}
 		}
 
@@ -540,7 +547,10 @@ func (Bloq) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.R
 func isProductCreator(ctx context.Context, product int64, creator int64, dbh db.DataManipulater) (bool, error) {
 	res, err := dbh.Select(ctx, "bloq", func() map[string]any {
 		return map[string]any{"creator": new(int64)}
-	}, map[string]any{"id": product, "creator": creator})
+	}, []db.Condition{
+		{Column: "id", Value: product},
+		{Column: "creator", Value: creator},
+	})
 
 	return len(res.Rows) == 1, err
 }
@@ -550,12 +560,16 @@ func personMakesOffer(ctx context.Context, person db.JSON, dbh db.DataManipulate
 		return nil, errors.New("no person received passed")
 	}
 
-	var where map[string]any = make(map[string]any, 2)
-	where["creator"] = *person["id"].(*int64)
-	if conf.MustGetConfOrDefault(false, "REST", "NSFW") {
-		where["hasAdultConsideration"] = *person["hasAdultConsideration"].(*bool)
-	} else {
-		where["hasAdultConsideration"] = false
+	var where []db.Condition = make([]db.Condition, 0, 2)
+	where = append(where, db.Condition{
+		Column: "creator",
+		Value:  *person["id"].(*int64),
+	})
+	if !conf.MustGetConfOrDefault(false, "REST", "NSFW") {
+		where = append(where, db.Condition{
+			Column: "hasAdultConsideration",
+			Value:  false,
+		})
 	}
 
 	result, err := dbh.Select(ctx, "bloq", func() map[string]any {
@@ -570,18 +584,25 @@ func personMakesOffer(ctx context.Context, person db.JSON, dbh db.DataManipulate
 		}
 	}, where)
 
-	if err != nil || len(result.Rows) == 0 {
+	if err != nil {
 		return nil, err
+	}
+
+	if len(result.Rows) < 1 {
+		return &rest.Resource{
+			Models: []db.JSON{},
+			Status: http.StatusNotFound,
+			Type:   BLOQ_TYPE,
+		}, nil
 	}
 
 	api := conf.MustGetConf("REST", "domain").(string)
 	for _, v := range result.Rows {
 		id := *v["id"].(*int64)
 
-		fmt.Printf("\n%#v\t%#v\n\n", v, id)
 		result, err := dbh.Select(ctx, "bloq_related", func() map[string]any {
 			return map[string]any{"related_id": new(int64)}
-		}, map[string]any{"bloq_id": id})
+		}, []db.Condition{{Column: "bloq_id", Value: id}})
 		if err != nil {
 			return nil, err
 		}
@@ -596,7 +617,7 @@ func personMakesOffer(ctx context.Context, person db.JSON, dbh db.DataManipulate
 
 		result, err = dbh.Select(ctx, "bloq_keywords", func() map[string]any {
 			return map[string]any{"keyword": new(string)}
-		}, map[string]any{"bloq_id": id})
+		}, []db.Condition{{Column: "bloq_id", Value: id}})
 		if err != nil {
 			return nil, err
 		}
@@ -611,7 +632,7 @@ func personMakesOffer(ctx context.Context, person db.JSON, dbh db.DataManipulate
 
 		result, err = dbh.Select(ctx, "bloq_image", func() map[string]any {
 			return map[string]any{"image": new(sql.NullString)}
-		}, map[string]any{"bloq_id": id})
+		}, []db.Condition{{Column: "bloq_id", Value: id}})
 		if err != nil {
 			return nil, err
 		}

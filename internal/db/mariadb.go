@@ -36,7 +36,7 @@ func NewMySQL(ctx context.Context, dsn string) (*MySQL, error) {
 	return dbh, nil
 }
 
-func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[string]any, where map[string]any) (res db.Result, err error) {
+func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[string]any, where []db.Condition) (res db.Result, err error) {
 	r := make([]db.JSON, 0)
 
 	res.Rows = r
@@ -54,9 +54,23 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 
 	conditions := make([]string, 0, len(where))
 	vals := make([]any, 0, len(conditions))
-	for k, v := range where {
-		conditions = append(conditions, fmt.Sprintf("`%s` = ?", k))
-		vals = append(vals, v)
+	for _, v := range where {
+		k := v.Column
+		switch v.Op {
+		case db.EQ:
+			conditions = append(conditions, fmt.Sprintf("`%s` = ?", k))
+		case db.NE:
+			conditions = append(conditions, fmt.Sprintf("`%s` != ?", k))
+		case db.GT:
+			conditions = append(conditions, fmt.Sprintf("`%s` > ?", k))
+		case db.GE:
+			conditions = append(conditions, fmt.Sprintf("`%s` >= ?", k))
+		case db.LT:
+			conditions = append(conditions, fmt.Sprintf("`%s` < ?", k))
+		case db.LE:
+			conditions = append(conditions, fmt.Sprintf("`%s` <= ?", k))
+		}
+		vals = append(vals, v.Value)
 	}
 
 	var rows *sql.Rows
@@ -76,8 +90,8 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 
 	defer rows.Close()
 	if err != nil {
-		fmt.Printf("%v\n", err.Error())
-		return
+		fmt.Printf("%#v\t%#v\n", res, err)
+		return res, err
 	}
 
 	for rows.Next() {

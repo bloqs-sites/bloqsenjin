@@ -151,7 +151,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodPost)
 			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodOptions)
 			headers.Set("Access-Control-Allow-Credentials", "true")
-			http_helpers.Append(&headers, "Access-Control-Allow-Headers", "Authorization")
+			http_helpers.Append(&headers, "Access-Control-Allow-Headers", "Authorization, Content-Type")
 			//bloqs_http.Append(&h, "Access-Control-Expose-Headers", "")
 			headers.Set("Access-Control-Max-Age", "0")
 		default:

@@ -29,6 +29,7 @@ func Server(ctx context.Context, endpoint string) http.HandlerFunc {
 	s.AttachHandler(context.Background(), "/profile", new(models.Profile))
 	s.AttachHandler(context.Background(), "/bloq", new(models.Bloq))
 	s.AttachHandler(context.Background(), "/offer", new(models.Offer))
+	s.AttachHandler(context.Background(), "/order", new(models.Order))
 
 	return s.Serve()
 }

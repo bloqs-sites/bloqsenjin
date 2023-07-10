@@ -95,9 +95,9 @@ func (a *BloqsAuther) SignInBasic(ctx context.Context, c *proto.Credentials_Basi
 			"identifier": new(string),
 			"type":       new(int),
 		}
-	}, map[string]any{
-		"identifier": c.Basic.Email,
-		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+	}, []db.Condition{
+		{Column: "identifier", Value: c.Basic.Email},
+		{Column: "type", Value: strconv.Itoa(int(auth.BASIC_EMAIL))},
 	})
 	log.Printf("%s took %v", "Select", time.Since(u))
 
@@ -224,9 +224,9 @@ func (a *BloqsAuther) IsSuperBasic(ctx context.Context, creds *proto.Credentials
 		return map[string]any{
 			"is_super": new(bool),
 		}
-	}, map[string]any{
-		"identifier": creds.Basic.Email,
-		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+	}, []db.Condition{
+		{Column: "identifier", Value: creds.Basic.Email},
+		{Column: "type", Value: strconv.Itoa(int(auth.BASIC_EMAIL))},
 	})
 
 	if err != nil {
@@ -255,9 +255,9 @@ func (a *BloqsAuther) CheckAccessBasic(ctx context.Context, c *proto.Credentials
 		return map[string]any{
 			"secret": new([]byte),
 		}
-	}, map[string]any{
-		"identifier": c.Basic.Email,
-		"type":       strconv.Itoa(int(auth.BASIC_EMAIL)),
+	}, []db.Condition{
+		{Column: "identifier", Value: c.Basic.Email},
+		{Column: "type", Value: strconv.Itoa(int(auth.BASIC_EMAIL))},
 	})
 
 	if err != nil {

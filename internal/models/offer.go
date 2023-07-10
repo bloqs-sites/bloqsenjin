@@ -18,7 +18,7 @@ type ItemAvailability = string
 
 const (
 	OfferTable        = "offers"
-	ItemsOfferedTable = "offers"
+	ItemsOfferedTable = "offersItems"
 	OfferType         = "Offer"
 
 	BackOrder           ItemAvailability = "BackOrder"
@@ -76,7 +76,7 @@ func (Offer) CreateTable() []db.Table {
 			Name: ItemsOfferedTable,
 			Columns: []string{
 				"`id` INT UNSIGNED AUTO_INCREMENT",
-				"`offer` INT UNSIGNED NOT NULL",
+				"`offers` INT UNSIGNED NOT NULL",
 				"`item` INT UNSIGNED NOT NULL",
 				"PRIMARY KEY(`id`)",
 			},
@@ -210,23 +210,38 @@ func (Offer) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 				break
 			}
 		}
-		if !valid {
-			return nil, &mux.HttpError{}
+		if !valid && *availability != "" {
+			return nil, &mux.HttpError{
+				Body:   "invalid availability value",
+				Status: http.StatusBadRequest,
+			}
 		}
+	} else {
+		defaultv := ""
+		availability = &defaultv
 	}
 
 	if price < 0 {
-		return nil, &mux.HttpError{}
+		return nil, &mux.HttpError{
+			Body:   "price lower that 0",
+			Status: http.StatusBadRequest,
+		}
 	}
 
-	today := time.Now().UTC().Truncate(24 * time.Hour)
+	today := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
 
 	if availabilityStarts.Before(today) {
-		return nil, &mux.HttpError{}
+		return nil, &mux.HttpError{
+			Body:   "availability start date already passed",
+			Status: http.StatusBadRequest,
+		}
 	}
 
 	if availabilityEnds.Before(availabilityStarts) {
-		return nil, &mux.HttpError{}
+		return nil, &mux.HttpError{
+			Body:   "availability end date happend before availability start date",
+			Status: http.StatusBadRequest,
+		}
 	}
 
 	_, _, err := YourProfile(w, r, s, auth.CREATE_OFFER, offeredBy)
@@ -235,7 +250,10 @@ func (Offer) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 	}
 
 	if len(itemsOffered) < 1 {
-		return nil, err
+		return nil, &mux.HttpError{
+			Body:   "No items offered",
+			Status: http.StatusUnprocessableEntity,
+		}
 	}
 
 	for _, i := range itemsOffered {
@@ -244,11 +262,13 @@ func (Offer) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 			return nil, err
 		}
 		if !valid {
-			return nil, &mux.HttpError{}
+			return nil, &mux.HttpError{
+				Body:   fmt.Sprintf("Item with id `%d` it's not yours", i),
+				Status: http.StatusBadRequest,
+			}
 		}
 	}
 
-	println(20)
 	result, err := s.DBH.Insert(r.Context(), OfferTable, []map[string]any{
 		{
 			"availability":       availability,
@@ -268,13 +288,13 @@ func (Offer) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 
 	id := *result.LastID
 
-	offers := make([]map[string]any, len(itemsOffered))
+	offers := make([]map[string]any, 0, len(itemsOffered))
 	for _, i := range itemsOffered {
-		offers = append(offers, map[string]any{"offer": id, "item": i})
+		offers = append(offers, map[string]any{"offers": id, "item": i})
 	}
 	_, err = s.DBH.Insert(r.Context(), ItemsOfferedTable, offers)
 	if err != nil {
-		s.DBH.Delete(r.Context(), "offer", map[string]any{"id": id})
+		s.DBH.Delete(r.Context(), OfferTable, map[string]any{"id": id})
 
 		status = http.StatusInternalServerError
 		return nil, &mux.HttpError{
@@ -291,6 +311,50 @@ func (Offer) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 }
 
 func (Offer) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+	product := r.URL.Query().Get("product")
+	if product != "" {
+		product_id, err := strconv.ParseUint(product, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := s.DBH.Select(r.Context(), ItemsOfferedTable,
+			func() map[string]any {
+				return map[string]any{"offers": new(uint64)}
+			}, []db.Condition{{Column: "item", Value: product_id}})
+
+		results := make([]db.JSON, 0, len(res.Rows))
+		for _, i := range res.Rows {
+			id := *i["offers"].(*uint64)
+			now := time.Now()
+			res, err := s.DBH.Select(r.Context(), OfferTable,
+				func() map[string]any {
+					return map[string]any{
+						"id":                 new(uint64),
+						"availability":       new(ItemAvailability),
+						"availabilityStarts": new(string),
+						"availabilityEnds":   new(string),
+						"offeredBy":          new(uint64),
+						"price":              new(float32),
+					}
+				}, []db.Condition{
+					{Column: "id", Op: db.EQ, Value: id},
+					{Column: "availabilityStarts", Op: db.LE, Value: now},
+					{Column: "availabilityEnds", Op: db.GE, Value: now},
+				})
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, res.Rows...)
+		}
+
+		return &rest.Resource{
+			Models: results,
+			Type:   OfferType,
+			Status: http.StatusOK,
+		}, err
+	}
+
 	return nil, nil
 }
 

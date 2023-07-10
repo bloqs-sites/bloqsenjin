@@ -204,9 +204,7 @@ func (Org) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*r
 	var result db.Result
 	result, err = s.DBH.Select(r.Context(), "credential_accounts", func() map[string]any {
 		return nil
-	}, map[string]any{
-		"credential_id": claims.Payload.Client,
-	})
+	}, []db.Condition{{Column: "credential_id", Value: claims.Payload.Client}})
 	if err != nil {
 		status = http.StatusInternalServerError
 		return nil, &mux.HttpError{
@@ -303,9 +301,9 @@ func (Org) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*r
 						"id":     new(int64),
 						"weight": new(float32),
 					}
-				}, map[string]any{
-					"preference1_id": min,
-					"preference2_id": max,
+				}, []db.Condition{
+					{Column: "preference1_id", Value: min},
+					{Column: "preference2_id", Value: max},
 				})
 
 				if err != nil {
@@ -407,7 +405,7 @@ func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*res
 			return map[string]any{
 				"account_id": new(int64),
 			}
-		}, map[string]any{"credential_id": *id})
+		}, []db.Condition{{Column: "credential_id", Value: *id}})
 
 		if err != nil {
 			return nil, err
@@ -429,7 +427,7 @@ func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*res
 					"name":  new(string),
 					"image": new(string),
 				}
-			}, map[string]any{"id": id})
+			}, []db.Condition{{Column: "id", Value: id}})
 
 			if err != nil {
 				return
@@ -442,7 +440,7 @@ func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*res
 					"preference_id": new(int64),
 					"weight":        new(float32),
 				}
-			}, map[string]any{"account_id": acc["id"]})
+			}, []db.Condition{{Column: "account_id", Value: acc["id"]}})
 
 			if err != nil {
 				return
@@ -469,9 +467,9 @@ func (Org) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*res
 
 		result = db.Result{Rows: accs}
 	} else {
-		var where map[string]any = nil
+		var where []db.Condition = []db.Condition{}
 		if (id != nil) && (*id != "") {
-			where = map[string]any{"id": *id}
+            where = append(where, db.Condition{Column: "id", Value: *id})
 		}
 
 		result, err = s.DBH.Select(r.Context(), "account", func() map[string]any {

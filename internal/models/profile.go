@@ -240,9 +240,7 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 	var result db.Result
 	result, err = s.DBH.Select(r.Context(), "credential_profiles", func() map[string]any {
 		return nil
-	}, map[string]any{
-		"credential_id": claims.Payload.Client,
-	})
+	}, []db.Condition{{Column: "credential_id", Value: claims.Payload.Client}})
 	if err != nil {
 		status = http.StatusInternalServerError
 		return nil, &mux.HttpError{
@@ -359,9 +357,9 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 						"id":     new(int64),
 						"weight": new(float32),
 					}
-				}, map[string]any{
-					"preference1_id": min,
-					"preference2_id": max,
+				}, []db.Condition{
+					{Column: "preference1_id", Value: min},
+					{Column: "preference2_id", Value: max},
 				})
 
 				if err != nil {
@@ -428,7 +426,7 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 					"profile_id": new(int64),
 					"birthDate":  new(string),
 				}
-			}, map[string]any{"credential_id": client})
+			}, []db.Condition{{Column: "credential_id", Value: client}})
 			if err != nil {
 				return nil, err
 			}
@@ -453,7 +451,7 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 						//					"followers":             new(uint64),
 						//					"following":             new(uint64),
 					}
-				}, map[string]any{"id": id})
+				}, []db.Condition{{Column: "id", Value: id}})
 				if err != nil {
 					return
 				}
@@ -471,7 +469,7 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 
 			result = db.Result{Rows: accs}
 		} else {
-			var where map[string]any = nil
+			var where []db.Condition = nil
 			cols := map[string]any{
 				"id":          new(int64),
 				"name":        new(string),
@@ -489,7 +487,7 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 			}
 
 			if (id != nil) && (*id != "") {
-				where = map[string]any{"id": *id}
+				where = append(where, db.Condition{Column: "id", Value: *id})
 			}
 
 			claims, err := helpers.ValidateAndGetClaims(w, r, a, bloqs_auth.NIL)
@@ -499,9 +497,9 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 						"profile_id": new(int64),
 						"birthDate":  new(string),
 					}
-				}, map[string]any{
-					"credential_id": claims.Payload.Client,
-					"profile_id":    id,
+				}, []db.Condition{
+					{Column: "credential_id", Value: claims.Payload.Client},
+					{Column: "profile_id", Value: id},
 				})
 
 				if err == nil && res.Rows[0] != nil {
@@ -653,7 +651,7 @@ func personalAccount(ctx context.Context, acc db.JSON, birthDate string, s rest.
 			"preference_id": new(int64),
 			"weight":        new(float32),
 		}
-	}, map[string]any{"profile_id": id})
+	}, []db.Condition{{Column: "profile_id", Value: id}})
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		return acc
@@ -698,9 +696,9 @@ func YourProfile(w http.ResponseWriter, r *http.Request, s rest.RESTServer, p bl
 			"profile_id": new(int64),
 			"birthDate":  new(string),
 		}
-	}, map[string]any{
-		"credential_id": claims.Payload.Client,
-		"profile_id":    you,
+	}, []db.Condition{
+		{Column: "credential_id", Value: claims.Payload.Client},
+		{Column: "profile_id", Value: you},
 	})
 
 	if err != nil || res.Rows[0] == nil {
@@ -722,7 +720,7 @@ func YourProfile(w http.ResponseWriter, r *http.Request, s rest.RESTServer, p bl
 			"hasAdultConsideration": new(bool),
 			"level":                 new(uint8),
 		}
-	}, map[string]any{"id": you})
+	}, []db.Condition{{Column: "id", Value: you}})
 	if err != nil {
 		return claims, nil, err
 	}

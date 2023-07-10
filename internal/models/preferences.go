@@ -226,9 +226,9 @@ func (m Preference) Create(w http.ResponseWriter, r *http.Request, s rest.RESTSe
 func (p Preference) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
 	id := s.Seg(0)
 
-	var where map[string]any = nil
+	var where []db.Condition = []db.Condition{}
 	if (id != nil) && (*id != "") {
-		where = map[string]any{"id": *id}
+        where = append(where, db.Condition{Column: "id", Value: *id})
 	}
 
 	result, err := s.DBH.Select(r.Context(), "preference", func() map[string]any {
@@ -300,7 +300,7 @@ func authSrv(ctx context.Context) (proto.AuthServer, error) {
 func PreferenceExists(ctx context.Context, id int64, s rest.RESTServer) (bool, error) {
 	result, err := s.DBH.Select(ctx, "preference", func() map[string]any {
 		return map[string]any{"id": new(int64)}
-	}, map[string]any{"id": id})
+	}, []db.Condition{{Column: "id", Value: id}})
 	if err != nil {
 		return false, err
 	}

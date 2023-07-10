@@ -28,6 +28,7 @@ func main() {
 		new(models.Bloq),
 		new(models.Org),
 		new(models.Offer),
+		new(models.Order),
 	} {
 		if err := dbh.DropTables(context.Background(), i.CreateTable()); err != nil {
 			panic(err)

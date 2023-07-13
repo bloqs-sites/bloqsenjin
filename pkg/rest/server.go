@@ -43,7 +43,7 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 		s.segments = segs
 
 		headers := w.Header()
-		_, err := helpers.CheckOriginHeader(&headers, r, true)
+		_, err := helpers.CheckOriginHeader(&headers, r, false)
 
 		switch r.Method {
 		case http.MethodHead:

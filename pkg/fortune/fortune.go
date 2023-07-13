@@ -36,7 +36,7 @@ func Server(endpoint string) http.HandlerFunc {
 		var msg string
 
 		h := w.Header()
-		status, err := helpers.CheckOriginHeader(&h, r)
+		status, err := helpers.CheckOriginHeader(&h, r, true)
 
 		switch r.Method {
 		case "":

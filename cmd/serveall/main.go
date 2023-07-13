@@ -9,6 +9,7 @@ import (
 	auth "github.com/bloqs-sites/bloqsenjin/pkg/auth/http"
 	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/fortune"
+	"github.com/bloqs-sites/bloqsenjin/pkg/image"
 	rest "github.com/bloqs-sites/bloqsenjin/pkg/rest/http"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
@@ -17,6 +18,7 @@ var (
 	authPort    = flag.Int("authPort", 3000, "The HTTP auth server port")
 	restPort    = flag.Int("restPort", 8080, "The HTTP rest server port")
 	fortunePort = flag.Int("fortunePort", 4747, "The HTTP fortune server port")
+	imagePort   = flag.Int("imagePort", 8787, "The HTTP image server port")
 )
 
 func main() {
@@ -41,6 +43,10 @@ func main() {
 	go func() {
 		fmt.Printf("`fortune` server port:\t %d\n", *fortunePort)
 		ch <- http.ListenAndServe(fmt.Sprintf(":%d", *fortunePort), fortune.Server("/"))
+	}()
+	go func() {
+		fmt.Printf("`image` server port:\t %d\n", *imagePort)
+		http.ListenAndServe(fmt.Sprintf(":%d", *imagePort), image.Server("/"))
 	}()
 
 	for i := range ch {

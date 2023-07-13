@@ -20,6 +20,7 @@ import (
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	bloqs_helpers "github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
+	bloqs_image "github.com/bloqs-sites/bloqsenjin/pkg/image"
 	"github.com/bloqs-sites/bloqsenjin/pkg/rest"
 )
 
@@ -237,6 +238,8 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		return nil, err
 	}
 
+	fmt.Printf("%#v\n", likes)
+
 	var result db.Result
 	result, err = s.DBH.Select(r.Context(), "credential_profiles", func() map[string]any {
 		return nil
@@ -265,7 +268,12 @@ func (Profile) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer)
 		"hasAdultConsideration": hasAdultConsideration,
 	}
 	if image_header != nil {
-		insert["image"] = image_header.Filename
+		image, err := bloqs_image.Save(r.Context(), image, image_header)
+		if err != nil {
+			return nil, err
+		}
+
+		insert["image"] = image
 	}
 
 	result, err = s.DBH.Insert(r.Context(), "profile", []map[string]any{insert})
@@ -502,7 +510,7 @@ func (Profile) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 					{Column: "profile_id", Value: id},
 				})
 
-				if err == nil && res.Rows[0] != nil {
+				if err == nil && len(res.Rows) > 0 && res.Rows[0] != nil {
 					birthDate = res.Rows[0]["birthDate"].(*string)
 					cols["hasAdultConsideration"] = new(bool)
 					//				cols["followers"] = new(uint64)
@@ -577,8 +585,75 @@ func (Profile) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*res
 	return nil, nil
 }
 
-func (Profile) Delete(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {
-	return nil, nil
+func (Profile) Delete(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
+	idstr := s.Seg(0)
+
+	if idstr == nil {
+		return nil, &mux.HttpError{Status: http.StatusNotFound}
+	}
+
+	id, err := strconv.ParseInt(*idstr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	claims, _, err := YourProfile(w, r, s, bloqs_auth.DELETE_PROFILE, id)
+	if err != nil {
+		return nil, err
+	}
+
+	where := map[string]any{"id": id}
+	err = s.DBH.Delete(r.Context(), "profile", where)
+	if err != nil {
+		return nil, err
+	}
+
+	where = map[string]any{"profile_id": id}
+	err = s.DBH.Delete(r.Context(), "credential_profiles", where)
+	if err != nil {
+		return nil, err
+	}
+	err = s.DBH.Delete(r.Context(), "profile_languages", where)
+	if err != nil {
+		return nil, err
+	}
+	err = s.DBH.Delete(r.Context(), "profile_likes", where)
+	if err != nil {
+		return nil, err
+	}
+	err = s.DBH.Delete(r.Context(), "profile_follows", where)
+	if err != nil {
+		return nil, err
+	}
+	where = map[string]any{"follower_id": id}
+	err = s.DBH.Delete(r.Context(), "profile_follows", where)
+	if err != nil {
+		return nil, err
+	}
+	where = map[string]any{"customer": claims.Payload.Client}
+	err = s.DBH.Delete(r.Context(), OrderTable, where)
+	if err != nil {
+		return nil, err
+	}
+	where = map[string]any{"offeredBy": id}
+	err = s.DBH.Delete(r.Context(), OfferTable, where)
+	if err != nil {
+		return nil, err
+	}
+	where = map[string]any{"creator": id}
+	err = s.DBH.Delete(r.Context(), "bloq", where)
+	if err != nil {
+		return nil, err
+	}
+	where = map[string]any{"author": id}
+	err = s.DBH.Delete(r.Context(), "bloq_review", where)
+	if err != nil {
+		return nil, err
+	}
+
+	return &rest.Resource{
+		Status: http.StatusNoContent,
+	}, nil
 }
 
 func calcProfileLvL(creation_date time.Time) uint8 {

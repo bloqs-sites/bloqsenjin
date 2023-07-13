@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/proto"
+	"github.com/resendlabs/resend-go"
 )
 
 type AuthServer struct {
@@ -48,6 +51,25 @@ func (s *AuthServer) SignIn(ctx context.Context, in *proto.Credentials) (*proto.
 	//status = http.StatusNoContent
 	status = http.StatusCreated
 	if id := CredentialsToID(in); id != nil {
+		k, exists := os.LookupEnv("BLOQS_EMAIL_RESEND_KEY")
+
+		if exists {
+			client := resend.NewClient(k)
+
+			params := &resend.SendEmailRequest{
+				From:    "Bloqs <onboarding@resend.dev>",
+				To:      []string{*id},
+				Subject: "Bloq credentials created",
+				Text:    fmt.Sprintf("Credentials created at `%s`", *conf.CnfPath),
+			}
+
+			_, err := client.Emails.Send(params)
+			if err != nil {
+				status = http.StatusInternalServerError
+				return ErrorToValidation(err, &status), err
+			}
+		}
+
 		return Valid(fmt.Sprintf("Credentials for `%s` were created with success!", *id), &status), nil
 	} else {
 		return Valid("Credentials were created with success!", &status), nil

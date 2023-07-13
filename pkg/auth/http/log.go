@@ -29,7 +29,7 @@ func LogRoute(w http.ResponseWriter, r *http.Request, segs []string) {
 	)
 
 	h := w.Header()
-	status, err = helpers.CheckOriginHeader(&h, r)
+	status, err = helpers.CheckOriginHeader(&h, r, true)
 
 	types_route := conf.MustGetConfOrDefault("/types/", "auth", "paths", "types")
 

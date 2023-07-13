@@ -83,29 +83,33 @@ func ValidateDomain(domain string) error {
 	return nil
 }
 
-func CheckOriginHeader(h *http.Header, r *http.Request) (uint32, error) {
-	o := r.Header.Get("Origin")
-	uri, err := url.ParseRequestURI(o)
+func CheckOriginHeader(h *http.Header, r *http.Request, validate bool) (uint32, error) {
+	if validate {
+		o := r.Header.Get("Origin")
+		uri, err := url.ParseRequestURI(o)
 
-	if err != nil {
-		return http.StatusForbidden, &mux.HttpError{
-			Body:   fmt.Sprintf("the `Origin` HTTP header has unparsable value `%s`:\t%s", o, err),
-			Status: http.StatusForbidden,
+		if err != nil {
+			return http.StatusForbidden, &mux.HttpError{
+				Body:   fmt.Sprintf("the `Origin` HTTP header has unparsable value `%s`:\t%s", o, err),
+				Status: http.StatusForbidden,
+			}
 		}
-	}
 
-	if err := ValidateDomain(uri.Hostname()); err != nil {
-		return http.StatusForbidden, &mux.HttpError{
-			Body:   fmt.Sprintf("the `Origin` HTTP header its forbidden:\t%s", err),
-			Status: http.StatusForbidden,
+		if err := ValidateDomain(uri.Hostname()); err != nil {
+			return http.StatusForbidden, &mux.HttpError{
+				Body:   fmt.Sprintf("the `Origin` HTTP header its forbidden:\t%s", err),
+				Status: http.StatusForbidden,
+			}
+		} else {
+			if GetDomainsType() == DOMAINS_WHITELIST {
+				h.Set("Access-Control-Allow-Origin", uri.String())
+				helpers.Append(h, "Vary", "Origin")
+			} else {
+				h.Set("Access-Control-Allow-Origin", "*")
+			}
 		}
 	} else {
-		if GetDomainsType() == DOMAINS_WHITELIST {
-			h.Set("Access-Control-Allow-Origin", uri.String())
-			helpers.Append(h, "Vary", "Origin")
-		} else {
-			h.Set("Access-Control-Allow-Origin", "*")
-		}
+		h.Set("Access-Control-Allow-Origin", "*")
 	}
 
 	return http.StatusOK, nil

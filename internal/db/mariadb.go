@@ -91,7 +91,7 @@ func (dbh *MySQL) Select(ctx context.Context, table string, columns func() map[s
 	defer rows.Close()
 	if err != nil {
 		fmt.Printf("%#v\t%#v\n", res, err)
-		return res, err
+		return
 	}
 
 	for rows.Next() {

@@ -43,9 +43,67 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 		s.segments = segs
 
 		headers := w.Header()
-		_, err := helpers.CheckOriginHeader(&headers, r)
+		_, err := helpers.CheckOriginHeader(&headers, r, true)
 
 		switch r.Method {
+		case http.MethodHead:
+			if err != nil {
+				fmt.Printf("%v\n", err)
+				break
+			}
+
+			var resources *Resource
+			resources, err = h.Read(w, r, *s)
+
+			if err != nil {
+				fmt.Printf("%v\n", err)
+				break
+			}
+
+			if resources == nil {
+				err = &mux.HttpError{
+					Status: http.StatusNotFound,
+				}
+				break
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			ctx := "https://schema.org/"
+			typ := resources.Type
+
+			if typ == "" {
+				err = &mux.HttpError{
+					Status: http.StatusInternalServerError,
+				}
+
+				break
+			}
+
+			last := s.Seg(s.SegLen() - 1)
+			second := s.Seg(1)
+			if ((s.SegLen() & 1) == 1) && (last != nil) && (*last != "") && resources.Unique {
+				if len(resources.Models) == 0 {
+					err = &mux.HttpError{
+						Status: http.StatusNotFound,
+					}
+
+					break
+				} else {
+					if second == nil {
+						resources.Models[0]["@context"] = ctx
+						resources.Models[0]["@type"] = typ
+					}
+				}
+			} else {
+				if len(resources.Models) > 0 {
+					resources.Models = append([]db.JSON{
+						{
+							"@context": ctx,
+							"@type":    typ,
+						},
+					}, resources.Models...)
+				}
+			}
 		case "":
 			fallthrough
 		case http.MethodGet:
@@ -147,8 +205,18 @@ func (s *RESTServer) AttachHandler(ctx context.Context, route string, h Handler)
 			}
 			w.WriteHeader(int(created.Status))
 			w.Write([]byte(created.Message))
+		case http.MethodDelete:
+			_, err = h.Delete(w, r, *s)
+			if err != nil {
+				fmt.Printf("%v\n", err)
+				break
+			}
 		case http.MethodOptions:
+			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodHead)
+			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodGet)
 			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodPost)
+			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodPut)
+			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodDelete)
 			http_helpers.Append(&headers, "Access-Control-Allow-Methods", http.MethodOptions)
 			headers.Set("Access-Control-Allow-Credentials", "true")
 			http_helpers.Append(&headers, "Access-Control-Allow-Headers", "Authorization, Content-Type")

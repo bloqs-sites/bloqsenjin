@@ -313,69 +313,77 @@ func (Offer) Create(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (
 
 func (Offer) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*rest.Resource, error) {
 	product := r.URL.Query().Get("product")
+
+	where := []db.Condition{}
+	id := s.Seg(0)
+	if (id != nil) && (*id != "") {
+		where = append(where, db.Condition{Column: "id", Value: *id})
+	}
+
 	if product != "" {
-		product_id, err := strconv.ParseUint(product, 10, 64)
+		product_id, err := strconv.ParseInt(product, 10, 64)
 		if err != nil {
 			return nil, err
 		}
 
-		res, err := s.DBH.Select(r.Context(), ItemsOfferedTable,
-			func() map[string]any {
-				return map[string]any{"offers": new(int64)}
-			}, []db.Condition{{Column: "item", Value: product_id}})
+		where = append(where, db.Condition{Column: "item", Value: product_id})
+	}
 
-		results := make([]db.JSON, 0, len(res.Rows))
-		api := conf.MustGetConf("REST", "domain").(string)
-		for _, i := range res.Rows {
-			id := *i["offers"].(*int64)
-			now := time.Now()
-			res, err := s.DBH.Select(r.Context(), OfferTable,
+	res, err := s.DBH.Select(r.Context(), ItemsOfferedTable,
+		func() map[string]any {
+			return map[string]any{"offers": new(int64)}
+		}, where)
+
+	results := make([]db.JSON, 0, len(res.Rows))
+	api := conf.MustGetConf("REST", "domain").(string)
+	for _, i := range res.Rows {
+		id := *i["offers"].(*int64)
+		now := time.Now()
+		res, err := s.DBH.Select(r.Context(), OfferTable,
+			func() map[string]any {
+				return map[string]any{
+					"id":                 new(int64),
+					"availability":       new(ItemAvailability),
+					"availabilityStarts": new(string),
+					"availabilityEnds":   new(string),
+					"offeredBy":          new(int64),
+					"price":              new(float32),
+				}
+			}, []db.Condition{
+				{Column: "id", Value: id},
+				{Column: "availabilityStarts", Op: db.LE, Value: now},
+				{Column: "availabilityEnds", Op: db.GE, Value: now},
+			})
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range res.Rows {
+			res, err = s.DBH.Select(r.Context(), ItemsOfferedTable,
 				func() map[string]any {
-					return map[string]any{
-						"id":                 new(int64),
-						"availability":       new(ItemAvailability),
-						"availabilityStarts": new(string),
-						"availabilityEnds":   new(string),
-						"offeredBy":          new(int64),
-						"price":              new(float32),
-					}
-				}, []db.Condition{
-					{Column: "id", Value: id},
-					{Column: "availabilityStarts", Op: db.LE, Value: now},
-					{Column: "availabilityEnds", Op: db.GE, Value: now},
-				})
+					return map[string]any{"offers": new(int64)}
+				}, []db.Condition{{Column: "item", Value: *o["id"].(*int64)}})
+
 			if err != nil {
 				return nil, err
 			}
-			for _, o := range res.Rows {
-				res, err = s.DBH.Select(r.Context(), ItemsOfferedTable,
-					func() map[string]any {
-						return map[string]any{"offers": new(int64)}
-					}, []db.Condition{{Column: "item", Value: *o["id"].(*int64)}})
 
-				if err != nil {
-					return nil, err
-				}
-
-				for _, i := range res.Rows {
-					i["href"] = fmt.Sprintf("%s/bloq/%d", api, i["offers"])
-				}
-				o["itemsOffered"] = append([]db.JSON{{
-					"@context": "https://schema.org/",
-					"@type":    "Product",
-				}}, res.Rows...)
+			for _, i := range res.Rows {
+				i["href"] = fmt.Sprintf("%s/bloq/%d", api, i["offers"])
 			}
-			results = append(results, res.Rows...)
-		}
 
-		return &rest.Resource{
-			Models: results,
-			Type:   OfferType,
-			Status: http.StatusOK,
-		}, err
+			o["itemsOffered"] = append([]db.JSON{{
+				"@context": "https://schema.org/",
+				"@type":    "Product",
+			}}, res.Rows...)
+			results = append(results, o)
+		}
 	}
 
-	return nil, nil
+	return &rest.Resource{
+		Models: results,
+		Type:   OfferType,
+		Status: http.StatusOK,
+	}, err
 }
 
 func (Offer) Update(http.ResponseWriter, *http.Request, rest.RESTServer) (*rest.Resource, error) {

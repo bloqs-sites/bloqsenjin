@@ -8,7 +8,6 @@ import (
 
 	internal_helpers "github.com/bloqs-sites/bloqsenjin/internal/helpers"
 	"github.com/bloqs-sites/bloqsenjin/pkg/auth"
-	"github.com/bloqs-sites/bloqsenjin/pkg/conf"
 	"github.com/bloqs-sites/bloqsenjin/pkg/db"
 	mux "github.com/bloqs-sites/bloqsenjin/pkg/http"
 	"github.com/bloqs-sites/bloqsenjin/pkg/http/helpers"
@@ -158,8 +157,7 @@ func (Order) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*r
 		where = append(where, db.Condition{Column: "id", Value: *id})
 	}
 
-	myself := conf.MustGetConfOrDefault("@", "REST", "myself")
-	if helpers.FormValueTrue(r.URL.Query().Get(myself)) {
+	if helpers.FormValueTrue(r.URL.Query().Get("myself")) {
 		a, err := authSrv(r.Context())
 		if err != nil {
 			return nil, err
@@ -171,13 +169,16 @@ func (Order) Read(w http.ResponseWriter, r *http.Request, s rest.RESTServer) (*r
 		}
 
 		where = append(where, db.Condition{
-			Column: "costumer",
+			Column: "customer",
 			Value:  claims.Payload.Client,
 		})
 	}
 
 	res, err := s.DBH.Select(r.Context(), OrderTable, func() map[string]any {
-		return map[string]any{}
+		return map[string]any{
+            "id": new(int64),
+            "acceptedOffer": new(int64),
+        }
 	}, where)
 
 	status := http.StatusInternalServerError

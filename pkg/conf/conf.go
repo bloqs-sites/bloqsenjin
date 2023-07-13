@@ -25,11 +25,11 @@ func init() {
 
 func Compile() error {
 	var err error
-	if sch, err = c.Compile(*sch_path); err != nil {
+	if sch, err = c.Compile(*SchPath); err != nil {
 		return err
 	}
 
-	if cnf, err = readConf(*cnf_path); err != nil {
+	if cnf, err = readConf(*CnfPath); err != nil {
 		return err
 	}
 

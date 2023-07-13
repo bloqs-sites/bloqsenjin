@@ -697,7 +697,7 @@ func calcProfileLvL(creation_date time.Time) uint8 {
 }
 
 func calcProfileLvLByString(creation_date_str string) uint8 {
-	date, err := time.Parse(time.DateTime, creation_date_str)
+    date, err := time.Parse("2006-01-02 15:04:05", creation_date_str)
 
 	if err != nil {
 		return 0
